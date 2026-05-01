@@ -29,11 +29,11 @@ This repository contains an initial skeleton with a working bootstrap pipeline:
 
 - Go 1.22+
 
-### Run (PowerShell)
+### Run (Git Bash - default)
 
-go run .\cmd\gateway\main.go
+./scripts/run-local.sh
 
-or
+PowerShell alternative:
 
 .\scripts\run-local.ps1
 
@@ -52,6 +52,44 @@ Environment variables:
 Example config file:
 
 - configs/config.example.yaml
+
+## Synthetic Dataset Generator
+
+This project includes a local-only HL7v2 dataset generator so you can develop and validate without committing synthetic data to GitHub.
+
+Generate files with defaults (Git Bash):
+
+./scripts/generate-dataset.sh
+
+Generate with custom parameters (Git Bash):
+
+./scripts/generate-dataset.sh --count 500 --error-rate 0.25 --profile large-network --types A01,A03,A08 --low-weight 0.50 --medium-weight 0.30 --high-weight 0.20 --out .local/datasets/hl7v2
+
+PowerShell helper:
+
+.\\scripts\\generate-dataset.ps1 -Count 500 -ErrorRate 0.25 -Profile large-network -LowWeight 0.5 -MediumWeight 0.3 -HighWeight 0.2 -Types "A01,A03,A08"
+
+Output includes:
+
+- .hl7 files (one message per file)
+- manifest.csv (file-level metadata with profile and severity)
+- summary.json (run summary, seed, profile, and severity counts)
+
+Error injection examples:
+
+- missing PID segment
+- invalid MSH version
+- missing event type in MSH-9
+- wrong segment delimiter
+- missing patient identifier
+
+Scenario profiles:
+
+- small-hospital
+- large-network
+- emergency-dept
+
+Note: generated data is written under .local/ and ignored by git.
 
 ## Project Structure
 
