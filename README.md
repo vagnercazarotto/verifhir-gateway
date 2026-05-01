@@ -2,7 +2,7 @@
 
 |         |                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CI      | [![CI](https://github.com/vagnercazarotto/verifhir-gateway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vagnercazarotto/verifhir-gateway/actions/workflows/ci.yml)                                                                                                                                                                                                                                |
+| CI      | [![CI](https://github.com/vagnercazarotto/verifhir-gateway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vagnercazarotto/verifhir-gateway/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/vagnercazarotto/verifhir-gateway/branch/main/graph/badge.svg)](https://codecov.io/gh/vagnercazarotto/verifhir-gateway)                                                                        |
 | Package | [![Go Version](https://img.shields.io/github/go-mod/go-version/vagnercazarotto/verifhir-gateway)](https://github.com/vagnercazarotto/verifhir-gateway/blob/main/go.mod) [![Go Reference](https://pkg.go.dev/badge/github.com/vagnercazarotto/verifhir-gateway.svg)](https://pkg.go.dev/github.com/vagnercazarotto/verifhir-gateway)                                                                                       |
 | Meta    | [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md) [![Domain](https://img.shields.io/badge/domain-HL7v2%20%E2%86%92%20FHIR-orange)](docs/PROJECT-SCOPE.md) [![Status](https://img.shields.io/badge/status-MVP-yellow)](#current-status)                                            |
 
@@ -99,6 +99,8 @@ Note: generated data is written under .local/ and ignored by git.
 
 ## Project Structure
 
+For the standards, terminologies, regulations, and tooling this gateway depends on, see [docs/STANDARDS.md](docs/STANDARDS.md).
+
 - cmd/gateway: application entrypoint
 - internal/config: runtime configuration loading
 - internal/ingest: ingestion adapters (MLLP stub for now)
@@ -161,8 +163,9 @@ Checks executed on push and pull requests to main:
 
 - gofmt verification
 - go vet
-- go test ./...
+- go test ./... (with `-race` and coverage profile)
 - go build ./...
+- coverage upload to Codecov
 
 Run locally before push (Git Bash default):
 
