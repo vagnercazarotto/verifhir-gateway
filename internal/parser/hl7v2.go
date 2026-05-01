@@ -15,6 +15,8 @@ func Parse(raw string) (ParsedHL7, error) {
 		return ParsedHL7{}, errors.New("empty HL7 payload")
 	}
 
-	segments := strings.Split(raw, "\\r")
+	segments := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == '\r' || r == '\n'
+	})
 	return ParsedHL7{Segments: segments}, nil
 }

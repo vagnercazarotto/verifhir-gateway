@@ -19,3 +19,25 @@ func TestParseEmptyPayload(t *testing.T) {
 		t.Fatal("expected error for empty payload")
 	}
 }
+
+func TestParseIgnoresTrailingDelimiter(t *testing.T) {
+	raw := "MSH|^~\\&|SRC|FAC|DST|FAC|202605011200||ADT^A01|1|P|2.5\rPID|1||12345\r"
+	parsed, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(parsed.Segments) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(parsed.Segments))
+	}
+}
+
+func TestParseSupportsNewlineDelimitedInput(t *testing.T) {
+	raw := "MSH|^~\\&|SRC|FAC|DST|FAC|202605011200||ADT^A01|1|P|2.5\nPID|1||12345\nPV1|1|I"
+	parsed, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(parsed.Segments) != 3 {
+		t.Fatalf("expected 3 segments, got %d", len(parsed.Segments))
+	}
+}
