@@ -3,7 +3,7 @@ package router
 import (
 	"fmt"
 
-	"github.com/vagnercazarotto/verifhir-gateway/pkg/model"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
 )
 
 // Route logs destination simulation for now.

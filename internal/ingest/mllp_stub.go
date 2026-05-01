@@ -1,6 +1,6 @@
 package ingest
 
-import "github.com/vagnercazarotto/verifhir-gateway/pkg/model"
+import "github.com/vagnercazarotto/verifhir-gateway/internal/model"
 
 // ReceiveStub simulates incoming HL7v2 payloads for local development.
 func ReceiveStub() model.HL7Message {

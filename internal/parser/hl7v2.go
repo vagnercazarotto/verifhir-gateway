@@ -1,22 +1,13 @@
 package parser
 
-import (
-	"errors"
-	"strings"
-)
+import "github.com/vagnercazarotto/verifhir-gateway/internal/hl7v2"
 
-// ParsedHL7 keeps a basic segment list for subsequent mapping rules.
-type ParsedHL7 struct {
-	Segments []string
-}
+// ParsedHL7 is an alias for hl7v2.Message kept here so older call sites keep
+// compiling. Prefer hl7v2.Message in new code.
+type ParsedHL7 = hl7v2.Message
 
-func Parse(raw string) (ParsedHL7, error) {
-	if strings.TrimSpace(raw) == "" {
-		return ParsedHL7{}, errors.New("empty HL7 payload")
-	}
-
-	segments := strings.FieldsFunc(raw, func(r rune) bool {
-		return r == '\r' || r == '\n'
-	})
-	return ParsedHL7{Segments: segments}, nil
+// Parse decomposes a raw HL7 v2 payload into a typed Message with field-level
+// access. See package hl7v2 for path syntax (e.g. "PID-3.1[2].4").
+func Parse(raw string) (*ParsedHL7, error) {
+	return hl7v2.Parse(raw)
 }

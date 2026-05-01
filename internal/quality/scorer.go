@@ -1,6 +1,6 @@
 package quality
 
-import "github.com/vagnercazarotto/verifhir-gateway/pkg/model"
+import "github.com/vagnercazarotto/verifhir-gateway/internal/model"
 
 // Score calculates a basic completeness score from mapped content.
 func Score(resource model.FHIRResource) model.QualityReport {

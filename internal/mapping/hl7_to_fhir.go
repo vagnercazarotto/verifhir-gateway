@@ -2,11 +2,11 @@ package mapping
 
 import (
 	"github.com/vagnercazarotto/verifhir-gateway/internal/parser"
-	"github.com/vagnercazarotto/verifhir-gateway/pkg/model"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
 )
 
 // ToFHIR applies minimal mapping rules from parsed HL7 to a FHIR Patient stub.
-func ToFHIR(msgID string, parsed parser.ParsedHL7) model.FHIRResource {
+func ToFHIR(msgID string, parsed *parser.ParsedHL7) model.FHIRResource {
 	return model.FHIRResource{
 		ResourceType: "Patient",
 		ID:           msgID,
