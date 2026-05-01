@@ -173,6 +173,17 @@ Recommended branch protection for main:
 3. Select required check: CI / quality
 4. Require branch to be up to date before merge
 
+## VS Code Tasks
+
+This repository includes preconfigured VS Code tasks in .vscode/tasks.json.
+
+Open the command palette and run `Tasks: Run Task`, then choose:
+
+- Quality Check (Git Bash)
+- Go Test ./...
+- Run Gateway (Git Bash)
+- Generate Dataset (Git Bash)
+
 ## License
 
 Apache 2.0
