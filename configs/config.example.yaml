@@ -1,0 +1,10 @@
+server:
+  http_port: 8080
+
+pipeline:
+  parser: hl7v2
+  mapper: hl7v2_to_fhir_r4
+  quality_scoring: true
+
+routing:
+  mode: stdout
