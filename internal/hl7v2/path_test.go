@@ -46,11 +46,11 @@ func TestMessageGetReturnsExpectedValues(t *testing.T) {
 	}
 	cases := map[string]string{
 		"PID-1":      "1",
-		"PID-3":      "PATID1234",       // first repetition, first component
-		"PID-3.4":    "HOSPITAL",        // first repetition, fourth component
-		"PID-3.5":    "MR",              // first repetition, fifth component
-		"PID-3[2]":   "ALT9999",         // second repetition, first component
-		"PID-3[2].4": "OTHER",           // second repetition, fourth component
+		"PID-3":      "PATID1234",
+		"PID-3.4":    "HOSPITAL",
+		"PID-3.5":    "MR",
+		"PID-3[2]":   "ALT9999",
+		"PID-3[2].4": "OTHER",
 		"PID-5.1":    "DOE",
 		"PID-5.2":    "JOHN",
 		"PID-5.3":    "A",
@@ -59,8 +59,8 @@ func TestMessageGetReturnsExpectedValues(t *testing.T) {
 		"PID-11.3":   "Boston",
 		"PID-11.4":   "MA",
 		"PV1-2":      "I",
-		"PV1-3.1":   "ICU",
-		"PV1-3.2":   "101",
+		"PV1-3.1":    "ICU",
+		"PV1-3.2":    "101",
 	}
 	for path, want := range cases {
 		t.Run(path, func(t *testing.T) {

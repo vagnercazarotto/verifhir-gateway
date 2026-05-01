@@ -7,10 +7,10 @@ import (
 	"github.com/vagnercazarotto/verifhir-gateway/internal/config"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/ingest"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/mapping"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/parser"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/quality"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/router"
-	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
 )
 
 func main() {

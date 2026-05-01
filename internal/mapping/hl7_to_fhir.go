@@ -1,8 +1,8 @@
 package mapping
 
 import (
-	"github.com/vagnercazarotto/verifhir-gateway/internal/parser"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/parser"
 )
 
 // ToFHIR applies minimal mapping rules from parsed HL7 to a FHIR Patient stub.
