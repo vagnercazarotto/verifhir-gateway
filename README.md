@@ -145,6 +145,34 @@ Contributions are welcome. Open an issue describing:
 2. expected behavior
 3. proposed approach
 
+## Quality Gates (GitHub + Local)
+
+CI workflow:
+
+- .github/workflows/ci.yml
+
+Checks executed on push and pull requests to main:
+
+- gofmt verification
+- go vet
+- go test ./...
+- go build ./...
+
+Run locally before push (Git Bash default):
+
+./scripts/quality-check.sh
+
+PowerShell alternative:
+
+.\scripts\quality-check.ps1
+
+Recommended branch protection for main:
+
+1. Require pull request before merge
+2. Require status checks to pass
+3. Select required check: CI / quality
+4. Require branch to be up to date before merge
+
 ## License
 
 Apache 2.0
