@@ -1,5 +1,11 @@
 # VeriFHIR Gateway
 
+|         |                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CI      | [![CI](https://github.com/vagnercazarotto/verifhir-gateway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vagnercazarotto/verifhir-gateway/actions/workflows/ci.yml)                                                                                                                                                                                                                                |
+| Package | [![Go Version](https://img.shields.io/github/go-mod/go-version/vagnercazarotto/verifhir-gateway)](https://github.com/vagnercazarotto/verifhir-gateway/blob/main/go.mod) [![Go Reference](https://pkg.go.dev/badge/github.com/vagnercazarotto/verifhir-gateway.svg)](https://pkg.go.dev/github.com/vagnercazarotto/verifhir-gateway)                                                                                       |
+| Meta    | [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md) [![Domain](https://img.shields.io/badge/domain-HL7v2%20%E2%86%92%20FHIR-orange)](docs/PROJECT-SCOPE.md) [![Status](https://img.shields.io/badge/status-MVP-yellow)](#current-status)                                            |
+
 HL7v2 to FHIR gateway with quality scoring for healthcare interoperability.
 
 ## Why This Project
