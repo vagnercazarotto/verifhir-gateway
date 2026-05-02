@@ -85,6 +85,116 @@ type QualityReport struct {
 	Warnings     []string
 }
 
+// ---- ORM^O01 ---------------------------------------------------------------
+
+// OrderItem holds a single item from an ORM^O01 order message.
+type OrderItem struct {
+	ID       string // ORC-2 (placer order number)
+	Code     string // OBR-4.1 universal service identifier
+	CodeText string // OBR-4.2 text description
+	System   string // OBR-4.3 coding system (e.g. "LN" for LOINC)
+	Priority string // OBR-5 priority (R=Routine, S=Stat, U=Urgent)
+}
+
+// ServiceRequest is the FHIR R4 ServiceRequest resource mapped from ORM^O01.
+type ServiceRequest struct {
+	ID        string
+	Status    string      // draft | active | on-hold | revoked | completed
+	Intent    string      // order | plan | proposal
+	Subject   string      // patient MRN (PID-3.1)
+	OrderedAt string      // ORC-9 datetime ISO 8601
+	Items     []OrderItem // one per OBR segment
+}
+
+// ORMResult is the output of mapping an ORM^O01 message.
+type ORMResult struct {
+	EventType      string // "ORM^O01"
+	ServiceRequest ServiceRequest
+}
+
+// ---- ORU^R01 ---------------------------------------------------------------
+
+// Observation holds a single OBX observation.
+type Observation struct {
+	ID         string  // OBX-1 set ID
+	Code       string  // OBX-3.1
+	CodeText   string  // OBX-3.2
+	System     string  // OBX-3.3
+	Value      string  // OBX-5 (stringified)
+	Unit       string  // OBX-6.1
+	RangeText  string  // OBX-7 reference range
+	Status     string  // OBX-11: F=final, P=preliminary, C=corrected, X=cancelled
+	ObservedAt string  // OBX-14 datetime ISO 8601
+	Abnormal   bool    // true when OBX-8 is H, L, A, AA, LL, HH
+}
+
+// DiagnosticReport is the FHIR R4 DiagnosticReport mapped from ORU^R01.
+type DiagnosticReport struct {
+	ID             string
+	Status         string        // registered | partial | final | amended | corrected | cancelled
+	Code            string        // OBR-4.1 universal service ID
+	CodeText        string        // OBR-4.2
+	Subject         string        // patient MRN
+	EffectiveAt     string        // OBR-7 observation date/time ISO 8601
+	IssuedAt        string        // OBR-22 result status change date/time
+	Observations    []Observation // one per OBX segment
+}
+
+// ORUResult is the output of mapping an ORU^R01 message.
+type ORUResult struct {
+	EventType        string // "ORU^R01"
+	DiagnosticReport DiagnosticReport
+}
+
+// ---- SIU^S12 ---------------------------------------------------------------
+
+// AppointmentParticipant holds a single participant in an appointment.
+type AppointmentParticipant struct {
+	Role   string // FHIR ParticipantType (PART, ATND, CON, ...)
+	Name   string // SCH-16 / AIP-3
+	Status string // accepted | declined | tentative | needs-action
+}
+
+// Appointment is the FHIR R4 Appointment resource mapped from SIU^S12.
+type Appointment struct {
+	ID           string
+	Status       string                   // proposed | pending | booked | arrived | fulfilled | cancelled | noshow
+	ServiceCode  string                   // SCH-6.1
+	ServiceText  string                   // SCH-6.2
+	Start        string                   // SCH-11.4 ISO 8601
+	End          string                   // SCH-11.4 + SCH-9 duration
+	Comment      string                   // SCH-12
+	Participants []AppointmentParticipant
+}
+
+// SIUResult is the output of mapping an SIU message.
+type SIUResult struct {
+	EventType   string // "SIU^S12", "SIU^S13", etc.
+	Appointment Appointment
+}
+
+// ---- MDM^T02 ---------------------------------------------------------------
+
+// DocumentReference is the FHIR R4 DocumentReference mapped from MDM^T02.
+type DocumentReference struct {
+	ID          string
+	Status      string // current | superseded | entered-in-error
+	DocType     string // TXA-2 document type code
+	DocTypeText string // TXA-3 document content presentation
+	Subject     string // patient MRN
+	CreatedAt   string // TXA-6 origination datetime ISO 8601
+	AuthoredAt  string // TXA-7 transcription datetime ISO 8601
+	Author      string // TXA-11 authenticated by
+	Title       string // OBX-5 where OBX-3 = document title
+	Content     string // OBX-5 document text (first OBX with type TX)
+}
+
+// MDMResult is the output of mapping an MDM^T02 message.
+type MDMResult struct {
+	EventType         string // "MDM^T02"
+	DocumentReference DocumentReference
+}
+
 // RoutedPayload is the final package sent to destinations.
 type RoutedPayload struct {
 	Resource FHIRResource

@@ -1,6 +1,7 @@
 package quality
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -30,6 +31,30 @@ func Score(resource model.FHIRResource) model.QualityReport {
 		}
 		if enc, ok := resource.Body["encounter"].(*model.Encounter); ok && enc != nil {
 			findings = append(findings, scoreEncounter(enc)...)
+		}
+	}
+
+	if resource.ResourceType == "ServiceRequest" {
+		if sr, ok := resource.Body["serviceRequest"].(model.ServiceRequest); ok {
+			findings = append(findings, scoreServiceRequest(sr)...)
+		}
+	}
+
+	if resource.ResourceType == "DiagnosticReport" {
+		if dr, ok := resource.Body["diagnosticReport"].(model.DiagnosticReport); ok {
+			findings = append(findings, scoreDiagnosticReport(dr)...)
+		}
+	}
+
+	if resource.ResourceType == "Appointment" {
+		if appt, ok := resource.Body["appointment"].(model.Appointment); ok {
+			findings = append(findings, scoreAppointment(appt)...)
+		}
+	}
+
+	if resource.ResourceType == "DocumentReference" {
+		if doc, ok := resource.Body["documentReference"].(model.DocumentReference); ok {
+			findings = append(findings, scoreDocumentReference(doc)...)
 		}
 	}
 
@@ -196,6 +221,143 @@ func isFutureDate(s string) bool {
 		return false
 	}
 	return t.After(time.Now())
+}
+
+// scoreServiceRequest evaluates required ServiceRequest (ORM^O01) fields.
+func scoreServiceRequest(sr model.ServiceRequest) []model.QualityFinding {
+	var out []model.QualityFinding
+
+	// Completeness
+	if sr.Subject == "" {
+		out = append(out, model.QualityFinding{
+			Field: "PID.3", Rule: "required", Value: "", Impact: -0.25,
+		})
+	}
+	if len(sr.Items) == 0 {
+		out = append(out, model.QualityFinding{
+			Field: "OBR.4", Rule: "required", Value: "", Impact: -0.25,
+		})
+	} else if sr.Items[0].Code == "" {
+		out = append(out, model.QualityFinding{
+			Field: "OBR.4.1", Rule: "required", Value: "", Impact: -0.20,
+		})
+	}
+
+	// Conformity
+	validStatus := map[string]bool{"draft": true, "active": true, "on-hold": true, "revoked": true, "completed": true}
+	if sr.Status != "" && !validStatus[sr.Status] {
+		out = append(out, model.QualityFinding{
+			Field: "ORC.25", Rule: "enum", Value: sr.Status, Impact: -0.10,
+		})
+	}
+
+	return out
+}
+
+// scoreDiagnosticReport evaluates required DiagnosticReport (ORU^R01) fields.
+func scoreDiagnosticReport(dr model.DiagnosticReport) []model.QualityFinding {
+	var out []model.QualityFinding
+
+	// Completeness
+	if dr.Subject == "" {
+		out = append(out, model.QualityFinding{
+			Field: "PID.3", Rule: "required", Value: "", Impact: -0.25,
+		})
+	}
+	if dr.Code == "" {
+		out = append(out, model.QualityFinding{
+			Field: "OBR.4.1", Rule: "required", Value: "", Impact: -0.20,
+		})
+	}
+	if len(dr.Observations) == 0 {
+		out = append(out, model.QualityFinding{
+			Field: "OBX", Rule: "required", Value: "", Impact: -0.20,
+		})
+	}
+
+	// Conformity
+	validStatus := map[string]bool{"registered": true, "partial": true, "final": true, "amended": true, "corrected": true, "cancelled": true}
+	if dr.Status != "" && !validStatus[dr.Status] {
+		out = append(out, model.QualityFinding{
+			Field: "OBR.25", Rule: "enum", Value: dr.Status, Impact: -0.10,
+		})
+	}
+
+	// Confidence — check observation values are present
+	for i, obs := range dr.Observations {
+		if obs.Value == "" {
+			out = append(out, model.QualityFinding{
+				Field:  fmt.Sprintf("OBX[%d].5", i+1),
+				Rule:   "plausibility",
+				Value:  "",
+				Impact: -0.05,
+			})
+		}
+	}
+
+	return out
+}
+
+// scoreAppointment evaluates required Appointment (SIU) fields.
+func scoreAppointment(appt model.Appointment) []model.QualityFinding {
+	var out []model.QualityFinding
+
+	// Completeness
+	if appt.Start == "" {
+		out = append(out, model.QualityFinding{
+			Field: "SCH.11.4", Rule: "required", Value: "", Impact: -0.30,
+		})
+	}
+	if appt.ServiceCode == "" {
+		out = append(out, model.QualityFinding{
+			Field: "SCH.6.1", Rule: "required", Value: "", Impact: -0.20,
+		})
+	}
+
+	// Conformity
+	validStatus := map[string]bool{
+		"proposed": true, "pending": true, "booked": true,
+		"arrived": true, "fulfilled": true, "cancelled": true, "noshow": true,
+	}
+	if appt.Status != "" && !validStatus[appt.Status] {
+		out = append(out, model.QualityFinding{
+			Field: "MSH.9.2", Rule: "enum", Value: appt.Status, Impact: -0.10,
+		})
+	}
+
+	return out
+}
+
+// scoreDocumentReference evaluates required DocumentReference (MDM) fields.
+func scoreDocumentReference(doc model.DocumentReference) []model.QualityFinding {
+	var out []model.QualityFinding
+
+	// Completeness
+	if doc.Subject == "" {
+		out = append(out, model.QualityFinding{
+			Field: "PID.3", Rule: "required", Value: "", Impact: -0.25,
+		})
+	}
+	if doc.DocType == "" {
+		out = append(out, model.QualityFinding{
+			Field: "TXA.2", Rule: "required", Value: "", Impact: -0.20,
+		})
+	}
+	if doc.Content == "" {
+		out = append(out, model.QualityFinding{
+			Field: "OBX.5", Rule: "required", Value: "", Impact: -0.20,
+		})
+	}
+
+	// Conformity
+	validStatus := map[string]bool{"current": true, "superseded": true, "entered-in-error": true}
+	if doc.Status != "" && !validStatus[doc.Status] {
+		out = append(out, model.QualityFinding{
+			Field: "MSH.9.2", Rule: "enum", Value: doc.Status, Impact: -0.10,
+		})
+	}
+
+	return out
 }
 
 func round2(f float64) float64 {
