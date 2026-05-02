@@ -23,16 +23,16 @@ import (
 )
 
 type messageResult struct {
-	File         string               `json:"file"`
-	MessageID    string               `json:"msg_id"`
-	EventType    string               `json:"event_type,omitempty"`
-	ResourceType string               `json:"resource_type"`
-	Score        float64              `json:"score"`
-	Completeness float64              `json:"completeness"`
-	Conformity   float64              `json:"conformity"`
-	Confidence   float64              `json:"confidence"`
+	File         string                 `json:"file"`
+	MessageID    string                 `json:"msg_id"`
+	EventType    string                 `json:"event_type,omitempty"`
+	ResourceType string                 `json:"resource_type"`
+	Score        float64                `json:"score"`
+	Completeness float64                `json:"completeness"`
+	Conformity   float64                `json:"conformity"`
+	Confidence   float64                `json:"confidence"`
 	Findings     []model.QualityFinding `json:"findings,omitempty"`
-	ParseError   string               `json:"parse_error,omitempty"`
+	ParseError   string                 `json:"parse_error,omitempty"`
 }
 
 type report struct {
