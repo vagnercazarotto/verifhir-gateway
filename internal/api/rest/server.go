@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/vagnercazarotto/verifhir-gateway/internal/audit"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/channel"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/store"
 )
@@ -57,6 +58,7 @@ type MessageResponse struct {
 type Server struct {
 	store    store.Store
 	channels *channel.Registry
+	auditDir string
 	mux      *http.ServeMux
 }
 
@@ -73,9 +75,19 @@ func New(st store.Store, reg *channel.Registry) *Server {
 	s.mux.HandleFunc("GET /api/v1/channels/{id}", s.getChannel)
 	s.mux.HandleFunc("PUT /api/v1/channels/{id}", s.updateChannel)
 	s.mux.HandleFunc("DELETE /api/v1/channels/{id}", s.deleteChannel)
+	// audit + reports routes
+	s.mux.HandleFunc("GET /api/v1/audit", s.listAudit)
+	s.mux.HandleFunc("GET /api/v1/reports", s.getReports)
 	// health routes
 	s.mux.HandleFunc("GET /healthz", s.healthz)
 	s.mux.HandleFunc("GET /readyz", s.readyz)
+	return s
+}
+
+// WithAuditDir sets the directory from which audit log entries are served.
+// Call before the server starts accepting requests.
+func (s *Server) WithAuditDir(dir string) *Server {
+	s.auditDir = dir
 	return s
 }
 
@@ -244,6 +256,62 @@ func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// listAudit handles GET /api/v1/audit
+//
+// Query parameters:
+//   - from   — RFC3339 lower bound (inclusive)
+//   - to     — RFC3339 upper bound (inclusive)
+//   - stage  — filter by pipeline stage (ingest|parse|map|score|route)
+//   - limit  — max records (default 200, max 1000)
+func (s *Server) listAudit(w http.ResponseWriter, r *http.Request) {
+	if s.auditDir == "" {
+		writeError(w, http.StatusNotImplemented, "audit log directory not configured")
+		return
+	}
+	q := r.URL.Query()
+	limit := 200
+	if raw := q.Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "limit must be a positive integer")
+			return
+		}
+		if n > 1000 {
+			n = 1000
+		}
+		limit = n
+	}
+	entries, err := audit.ReadEntries(s.auditDir, q.Get("from"), q.Get("to"), q.Get("stage"), limit)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if entries == nil {
+		entries = []audit.Entry{}
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+// getReports handles GET /api/v1/reports
+//
+// Query parameters:
+//   - from — RFC3339 lower bound (inclusive)
+//   - to   — RFC3339 upper bound (inclusive)
+func (s *Server) getReports(w http.ResponseWriter, r *http.Request) {
+	rep, ok := s.store.(store.Reporter)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, "reporting not supported by this store backend")
+		return
+	}
+	q := r.URL.Query()
+	summary, err := rep.Summary(r.Context(), q.Get("from"), q.Get("to"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -39,3 +39,43 @@ export interface HealthResponse {
   status: 'ok' | 'unavailable'
   reason?: string
 }
+
+// ---- audit -----------------------------------------------------------------
+
+export interface AuditEntry {
+  ts: string
+  msg_id: string
+  stage: string
+  duration_ms: number
+  status: string
+  error?: string
+  resource_type?: string
+  event_type?: string
+  segments?: number
+  score?: number
+  completeness?: number
+  conformity?: number
+  confidence?: number
+  findings?: number
+}
+
+// ---- reports ---------------------------------------------------------------
+
+export interface DaySummary {
+  date: string
+  total: number
+  avg_score: number
+  sent: number
+  failed: number
+  dead_lettered: number
+  pending: number
+}
+
+export interface ReportSummary {
+  from: string
+  to: string
+  total: number
+  avg_score: number
+  by_status: Record<string, number>
+  by_day: DaySummary[]
+}

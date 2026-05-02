@@ -10,6 +10,7 @@ type Config struct {
 	MLLPAddr     string
 	DBPath       string // SQLite file path; ignored when DATABASE_URL is set
 	ChannelsFile string // optional YAML file with channel definitions
+	AuditDir     string // directory for daily .jsonl audit files
 }
 
 func Load() Config {
@@ -28,10 +29,16 @@ func Load() Config {
 		dbPath = ".local/verifhir.db"
 	}
 
+	auditDir := os.Getenv("GATEWAY_AUDIT_DIR")
+	if auditDir == "" {
+		auditDir = ".local/audit"
+	}
+
 	return Config{
 		HTTPPort:     port,
 		MLLPAddr:     mllp,
 		DBPath:       dbPath,
 		ChannelsFile: os.Getenv("GATEWAY_CHANNELS_FILE"),
+		AuditDir:     auditDir,
 	}
 }

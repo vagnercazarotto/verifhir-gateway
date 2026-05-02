@@ -34,6 +34,13 @@ func main() {
 	}
 	defer st.Close()
 
+	// File-based audit logger (fan-out: stderr + daily .jsonl).
+	auditCloser, err := audit.OpenFile(cfg.AuditDir)
+	if err != nil {
+		log.Fatalf("[gateway] audit: %v", err)
+	}
+	defer auditCloser.Close()
+
 	// Channel registry — load from YAML if configured.
 	reg := channel.NewRegistry()
 	if cfg.ChannelsFile != "" {
@@ -48,7 +55,7 @@ func main() {
 	// HTTP REST API
 	httpSrv := &http.Server{
 		Addr:    ":" + cfg.HTTPPort,
-		Handler: rest.New(st, reg),
+		Handler: rest.New(st, reg).WithAuditDir(cfg.AuditDir),
 	}
 	go func() {
 		log.Printf("[gateway] REST API listening on :%s", cfg.HTTPPort)

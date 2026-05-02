@@ -33,6 +33,33 @@ type Record struct {
 	UpdatedAt    time.Time
 }
 
+// DaySummary holds aggregated message stats for a single calendar day.
+type DaySummary struct {
+	Date         string  `json:"date"`
+	Total        int     `json:"total"`
+	AvgScore     float64 `json:"avg_score"`
+	Sent         int     `json:"sent"`
+	Failed       int     `json:"failed"`
+	DeadLettered int     `json:"dead_lettered"`
+	Pending      int     `json:"pending"`
+}
+
+// ReportSummary is the full aggregate returned by Reporter.Summary.
+type ReportSummary struct {
+	From     string         `json:"from"`
+	To       string         `json:"to"`
+	Total    int            `json:"total"`
+	AvgScore float64        `json:"avg_score"`
+	ByStatus map[string]int `json:"by_status"`
+	ByDay    []DaySummary   `json:"by_day"`
+}
+
+// Reporter is an optional interface that store backends may implement.
+// The REST API exposes it via GET /api/v1/reports.
+type Reporter interface {
+	Summary(ctx context.Context, from, to string) (*ReportSummary, error)
+}
+
 // Store is the interface that all persistence backends must satisfy.
 type Store interface {
 	// Save inserts a new message record with status "pending".
