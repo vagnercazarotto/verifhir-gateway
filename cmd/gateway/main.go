@@ -19,13 +19,12 @@ import (
 
 func main() {
 	cfg := config.Load()
-	fmt.Printf("[gateway] starting verifhir-gateway — HTTP :%s  MLLP %s\n", cfg.HTTPPort, cfg.MLLPAddr)
+	fmt.Printf("[gateway] starting verifhir-gateway http=:%s mllp=%s\n", cfg.HTTPPort, cfg.MLLPAddr)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	srv := mllp.New(cfg.MLLPAddr, pipeline)
-
 	if err := srv.ListenAndServe(ctx); err != nil {
 		log.Fatalf("[gateway] mllp server error: %v", err)
 	}
