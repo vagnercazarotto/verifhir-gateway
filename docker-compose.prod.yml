@@ -1,0 +1,43 @@
+# VeriFHIR Gateway — Production deployment
+#
+# Usage:
+#   curl -O https://raw.githubusercontent.com/vagnercazarotto/verifhir-gateway/main/docker-compose.prod.yml
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Images are pulled from GitHub Container Registry (no build required).
+# Pin a specific version by replacing "latest" with e.g. "v0.2.0".
+
+services:
+  gateway:
+    image: ghcr.io/vagnercazarotto/verifhir-gateway:latest
+    pull_policy: always
+    ports:
+      - "8080:8080"   # REST API
+      - "2575:2575"   # MLLP
+    environment:
+      - GATEWAY_HTTP_PORT=8080
+      - GATEWAY_MLLP_ADDR=0.0.0.0:2575
+      - GATEWAY_DB_PATH=.local/verifhir.db
+      # To use PostgreSQL instead of SQLite, uncomment and set DATABASE_URL:
+      # - DATABASE_URL=postgres://user:pass@db:5432/verifhir?sslmode=disable
+    volumes:
+      - gateway-data:/app/.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  web:
+    image: ghcr.io/vagnercazarotto/verifhir-web:latest
+    pull_policy: always
+    ports:
+      - "3000:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  gateway-data:

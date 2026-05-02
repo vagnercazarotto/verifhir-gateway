@@ -1,0 +1,13 @@
+# Git
+.git/
+.github/
+
+# Go source (already built before this runs)
+../../cmd/
+../../internal/
+../../go.mod
+../../go.sum
+
+# Dev artifacts
+node_modules/
+dist/

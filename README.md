@@ -31,7 +31,74 @@ This repository contains an initial skeleton with a working bootstrap pipeline:
 
 ## Quick Start
 
-### Prerequisites
+### Opção 1 — Docker (recomendado, sem precisar do código fonte)
+
+**Pré-requisitos:** Docker Desktop ou Docker Engine com Compose v2.
+
+```bash
+# 1. Baixar o compose de produção
+curl -O https://raw.githubusercontent.com/vagnercazarotto/verifhir-gateway/main/docker-compose.prod.yml
+
+# 2. Subir (as imagens são puxadas automaticamente do GHCR)
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Abrir no browser: **http://localhost:3000**
+
+| Porta | Serviço |
+|---|---|
+| 3000 | Web UI (React) |
+| 8080 | REST API |
+| 2575 | MLLP listener |
+
+**Atualizar para a versão mais recente:**
+
+```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+**Fixar versão específica** (recomendado em produção) — editar o arquivo e substituir `latest` por ex. `v0.2.0`:
+
+```yaml
+image: ghcr.io/vagnercazarotto/verifhir-gateway:v0.2.0
+image: ghcr.io/vagnercazarotto/verifhir-web:v0.2.0
+```
+
+**Parar e remover:**
+
+```bash
+docker compose -f docker-compose.prod.yml down
+```
+
+---
+
+### Opção 2 — Desenvolvimento local (com código fonte)
+
+**Pré-requisitos:** Go 1.25+, Node 22+, Docker Desktop.
+
+```bash
+git clone https://github.com/vagnercazarotto/verifhir-gateway.git
+cd verifhir-gateway
+
+# Subir tudo com build local
+docker compose up --build -d
+```
+
+Ou rodar cada serviço separadamente:
+
+```bash
+# Terminal 1 — Gateway Go
+mkdir -p .local
+go run ./cmd/gateway
+
+# Terminal 2 — Web UI (dev server com hot-reload)
+cd web && npm install && npm run dev
+```
+
+Web UI disponível em **http://localhost:5173** (proxy automático para a API em :8080).
+
+### Prerequisites (legacy scripts)
 
 - Go 1.22+
 

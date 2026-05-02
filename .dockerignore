@@ -1,0 +1,19 @@
+# Git
+.git/
+.github/
+
+# Dev artifacts
+.local/
+coverage.out
+*.coverprofile
+
+# Docs / scripts (not needed in the image)
+docs/
+scripts/
+
+# Frontend source (built separately in web/Dockerfile)
+web/
+
+# Editor
+.vscode/
+.idea/

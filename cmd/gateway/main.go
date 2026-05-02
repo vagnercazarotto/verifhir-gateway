@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/vagnercazarotto/verifhir-gateway/internal/audit"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/api/rest"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/audit"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/channel"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/config"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/ingest/mllp"
