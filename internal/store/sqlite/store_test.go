@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/store"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/store/sqlite"
 )
 
@@ -68,7 +69,7 @@ func TestSaveDefaultStatusIsPending(t *testing.T) {
 	_ = s.Save(context.Background(), testPayload("msg-002"))
 
 	rec, _ := s.Get(context.Background(), "msg-002")
-	if rec.Status != sqlite.StatusPending {
+	if rec.Status != store.StatusPending {
 		t.Errorf("status: want pending, got %s", rec.Status)
 	}
 }
@@ -131,13 +132,13 @@ func TestUpdateStatusChangesStatus(t *testing.T) {
 	ctx := context.Background()
 	_ = s.Save(ctx, testPayload("msg-upd"))
 
-	err := s.UpdateStatus(ctx, "msg-upd", sqlite.StatusSent, 1, "")
+	err := s.UpdateStatus(ctx, "msg-upd", store.StatusSent, 1, "")
 	if err != nil {
 		t.Fatalf("update status: %v", err)
 	}
 
 	rec, _ := s.Get(ctx, "msg-upd")
-	if rec.Status != sqlite.StatusSent {
+	if rec.Status != store.StatusSent {
 		t.Errorf("status: want sent, got %s", rec.Status)
 	}
 }
@@ -147,7 +148,7 @@ func TestUpdateStatusSetsAttempts(t *testing.T) {
 	ctx := context.Background()
 	_ = s.Save(ctx, testPayload("msg-att"))
 
-	_ = s.UpdateStatus(ctx, "msg-att", sqlite.StatusFailed, 3, "connection refused")
+	_ = s.UpdateStatus(ctx, "msg-att", store.StatusFailed, 3, "connection refused")
 
 	rec, _ := s.Get(ctx, "msg-att")
 	if rec.Attempts != 3 {
@@ -160,7 +161,7 @@ func TestUpdateStatusSetsAttempts(t *testing.T) {
 
 func TestUpdateStatusNotFoundReturnsError(t *testing.T) {
 	s := openMemory(t)
-	err := s.UpdateStatus(context.Background(), "nonexistent", sqlite.StatusSent, 1, "")
+	err := s.UpdateStatus(context.Background(), "nonexistent", store.StatusSent, 1, "")
 	if err == nil {
 		t.Fatal("expected error for nonexistent record, got nil")
 	}
@@ -203,10 +204,10 @@ func TestListFilteredByStatus(t *testing.T) {
 	_ = s.Save(ctx, testPayload("msg-f2"))
 	_ = s.Save(ctx, testPayload("msg-f3"))
 
-	_ = s.UpdateStatus(ctx, "msg-f1", sqlite.StatusSent, 1, "")
-	_ = s.UpdateStatus(ctx, "msg-f2", sqlite.StatusFailed, 3, "err")
+	_ = s.UpdateStatus(ctx, "msg-f1", store.StatusSent, 1, "")
+	_ = s.UpdateStatus(ctx, "msg-f2", store.StatusFailed, 3, "err")
 
-	recs, err := s.List(ctx, sqlite.StatusSent, 10)
+	recs, err := s.List(ctx, store.StatusSent, 10)
 	if err != nil {
 		t.Fatalf("list sent: %v", err)
 	}
@@ -267,7 +268,7 @@ func TestUpdateStatusUpdatesTimestamp(t *testing.T) {
 
 	t1 := t0.Add(5 * time.Minute)
 	s.SetNow(func() time.Time { return t1 })
-	_ = s.UpdateStatus(ctx, "msg-ts", sqlite.StatusSent, 1, "")
+	_ = s.UpdateStatus(ctx, "msg-ts", store.StatusSent, 1, "")
 
 	rec, _ := s.Get(ctx, "msg-ts")
 	if !rec.UpdatedAt.Equal(t1) {
