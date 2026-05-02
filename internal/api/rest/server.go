@@ -4,6 +4,13 @@
 //
 //	GET /api/v1/messages          — list messages (query: status, limit)
 //	GET /api/v1/messages/{id}     — get a single message by ID
+//	GET /api/v1/channels          — list channels
+//	POST /api/v1/channels         — create channel
+//	GET /api/v1/channels/{id}     — get channel by ID
+//	PUT /api/v1/channels/{id}     — update channel
+//	DELETE /api/v1/channels/{id}  — delete channel
+//	GET /healthz                  — liveness probe
+//	GET /readyz                   — readiness probe (checks store)
 //
 // All responses are JSON. Error bodies have the shape {"error":"reason"}.
 // The server uses Go 1.22 enhanced ServeMux patterns, so unknown methods
@@ -11,6 +18,7 @@
 package rest
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -18,6 +26,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/vagnercazarotto/verifhir-gateway/internal/channel"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/store"
 )
 
@@ -43,18 +52,30 @@ type MessageResponse struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// Server is an http.Handler that exposes the message store as a REST API.
+// Server is an http.Handler that exposes the message store and channel
+// registry as a REST API.
 type Server struct {
-	store store.Store
-	mux   *http.ServeMux
+	store    store.Store
+	channels *channel.Registry
+	mux      *http.ServeMux
 }
 
-// New creates a Server backed by st and registers all routes.
-func New(st store.Store) *Server {
-	s := &Server{store: st}
+// New creates a Server backed by st and reg, and registers all routes.
+func New(st store.Store, reg *channel.Registry) *Server {
+	s := &Server{store: st, channels: reg}
 	s.mux = http.NewServeMux()
+	// message routes
 	s.mux.HandleFunc("GET /api/v1/messages", s.listMessages)
 	s.mux.HandleFunc("GET /api/v1/messages/{id}", s.getMessage)
+	// channel routes
+	s.mux.HandleFunc("GET /api/v1/channels", s.listChannels)
+	s.mux.HandleFunc("POST /api/v1/channels", s.createChannel)
+	s.mux.HandleFunc("GET /api/v1/channels/{id}", s.getChannel)
+	s.mux.HandleFunc("PUT /api/v1/channels/{id}", s.updateChannel)
+	s.mux.HandleFunc("DELETE /api/v1/channels/{id}", s.deleteChannel)
+	// health routes
+	s.mux.HandleFunc("GET /healthz", s.healthz)
+	s.mux.HandleFunc("GET /readyz", s.readyz)
 	return s
 }
 
@@ -137,6 +158,94 @@ func recordToResponse(rec *store.Record) MessageResponse {
 	}
 }
 
+// ---- channel handlers -----------------------------------------------------
+
+// listChannels handles GET /api/v1/channels
+func (s *Server) listChannels(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.channels.List())
+}
+
+// createChannel handles POST /api/v1/channels
+func (s *Server) createChannel(w http.ResponseWriter, r *http.Request) {
+	var ch channel.Channel
+	if err := json.NewDecoder(r.Body).Decode(&ch); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if ch.ID == "" {
+		writeError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+	if ch.URL == "" {
+		writeError(w, http.StatusBadRequest, "url is required")
+		return
+	}
+	if err := s.channels.Add(ch); err != nil {
+		if errors.Is(err, channel.ErrDuplicateID) {
+			writeError(w, http.StatusConflict, "channel ID already exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to create channel")
+		return
+	}
+	got, _ := s.channels.Get(ch.ID)
+	writeJSON(w, http.StatusCreated, got)
+}
+
+// getChannel handles GET /api/v1/channels/{id}
+func (s *Server) getChannel(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ch, err := s.channels.Get(id)
+	if err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "channel not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to retrieve channel")
+		return
+	}
+	writeJSON(w, http.StatusOK, ch)
+}
+
+// updateChannel handles PUT /api/v1/channels/{id}
+func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var ch channel.Channel
+	if err := json.NewDecoder(r.Body).Decode(&ch); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	ch.ID = id // path wins over body
+	if ch.URL == "" {
+		writeError(w, http.StatusBadRequest, "url is required")
+		return
+	}
+	if err := s.channels.Update(ch); err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "channel not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to update channel")
+		return
+	}
+	got, _ := s.channels.Get(id)
+	writeJSON(w, http.StatusOK, got)
+}
+
+// deleteChannel handles DELETE /api/v1/channels/{id}
+func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.channels.Delete(id); err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "channel not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to delete channel")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -145,4 +254,33 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// pinger is an optional interface that store backends may implement.
+// If the backing store satisfies pinger, readyz will call Ping to verify
+// database connectivity.
+type pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// healthz handles GET /healthz — liveness probe.
+// Always returns 200 {"status":"ok"} while the process is running.
+func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// readyz handles GET /readyz — readiness probe.
+// Returns 200 {"status":"ok"} when the store is reachable,
+// or 503 {"status":"unavailable","reason":"..."} otherwise.
+func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
+	if p, ok := s.store.(pinger); ok {
+		if err := p.Ping(r.Context()); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"status": "unavailable",
+				"reason": err.Error(),
+			})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

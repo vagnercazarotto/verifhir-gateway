@@ -61,6 +61,9 @@ func (s *Store) SetNow(fn func() time.Time) { s.now = fn }
 // Close closes the underlying database connection.
 func (s *Store) Close() error { return s.db.Close() }
 
+// Ping verifies the database connection is alive.
+func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+
 // Save inserts a new message record with status "pending".
 // If a record with the same ID already exists the call is a no-op (INSERT OR IGNORE).
 func (s *Store) Save(ctx context.Context, payload model.RoutedPayload) error {

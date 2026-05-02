@@ -73,6 +73,9 @@ func (s *Store) DB() *sql.DB { return s.db }
 // Close closes the underlying database connection.
 func (s *Store) Close() error { return s.db.Close() }
 
+// Ping verifies the database connection is alive.
+func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+
 // Save inserts a new message record with status "pending".
 // Duplicate IDs are silently ignored (ON CONFLICT DO NOTHING).
 func (s *Store) Save(ctx context.Context, payload model.RoutedPayload) error {

@@ -1,16 +1,19 @@
 package rest_test
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/vagnercazarotto/verifhir-gateway/internal/api/rest"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/channel"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/store"
 )
@@ -84,6 +87,16 @@ func (m *mockStore) Close() error { return nil }
 
 // ---- helpers ---------------------------------------------------------------
 
+// newSrv builds a Server with the given store and an empty channel registry.
+func newSrv(st store.Store) *rest.Server {
+	return rest.New(st, channel.NewRegistry())
+}
+
+// newSrvWithReg builds a Server with the given store and registry.
+func newSrvWithReg(st store.Store, reg *channel.Registry) *rest.Server {
+	return rest.New(st, reg)
+}
+
 func get(srv http.Handler, path string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	rr := httptest.NewRecorder()
@@ -91,12 +104,32 @@ func get(srv http.Handler, path string) *httptest.ResponseRecorder {
 	return rr
 }
 
-// ---- tests -----------------------------------------------------------------
+func doJSON(srv http.Handler, method, path string, body any) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	_ = json.NewEncoder(&buf).Encode(body)
+	req := httptest.NewRequest(method, path, &buf)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	return rr
+}
+
+func makeTestChannel(id string) channel.Channel {
+	return channel.Channel{
+		ID:      id,
+		Name:    "Test " + id,
+		URL:     "https://fhir.example.com/" + id,
+		Enabled: true,
+		Retry:   channel.RetryConfig{MaxAttempts: 3, InitialBackoffMS: 500, Multiplier: 2.0},
+	}
+}
+
+// ---- message tests ---------------------------------------------------------
 
 func TestListMessagesReturns200(t *testing.T) {
 	m := newMock()
 	m.add("msg-1", store.StatusPending, 0.9)
-	srv := rest.New(m)
+	srv := newSrv(m)
 
 	rr := get(srv, "/api/v1/messages")
 	if rr.Code != http.StatusOK {
@@ -105,7 +138,7 @@ func TestListMessagesReturns200(t *testing.T) {
 }
 
 func TestListMessagesContentType(t *testing.T) {
-	srv := rest.New(newMock())
+	srv := newSrv(newMock())
 	rr := get(srv, "/api/v1/messages")
 	ct := rr.Header().Get("Content-Type")
 	if ct != "application/json" {
@@ -117,7 +150,7 @@ func TestListMessagesReturnsArray(t *testing.T) {
 	m := newMock()
 	m.add("msg-1", store.StatusPending, 0.9)
 	m.add("msg-2", store.StatusSent, 0.8)
-	srv := rest.New(m)
+	srv := newSrv(m)
 
 	rr := get(srv, "/api/v1/messages")
 	var resp []map[string]any
@@ -130,7 +163,7 @@ func TestListMessagesReturnsArray(t *testing.T) {
 }
 
 func TestListMessagesEmptyStoreReturnsEmptyArray(t *testing.T) {
-	srv := rest.New(newMock())
+	srv := newSrv(newMock())
 	rr := get(srv, "/api/v1/messages")
 
 	var resp []map[string]any
@@ -144,7 +177,7 @@ func TestListMessagesFilterByStatus(t *testing.T) {
 	m := newMock()
 	m.add("msg-pending", store.StatusPending, 0.9)
 	m.add("msg-sent", store.StatusSent, 0.8)
-	srv := rest.New(m)
+	srv := newSrv(m)
 
 	rr := get(srv, "/api/v1/messages?status=pending")
 	var resp []map[string]any
@@ -162,7 +195,7 @@ func TestListMessagesLimit(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		m.add(fmt.Sprintf("msg-%d", i), store.StatusPending, 0.9)
 	}
-	srv := rest.New(m)
+	srv := newSrv(m)
 
 	rr := get(srv, "/api/v1/messages?limit=2")
 	var resp []map[string]any
@@ -173,7 +206,7 @@ func TestListMessagesLimit(t *testing.T) {
 }
 
 func TestListMessagesInvalidLimitReturns400(t *testing.T) {
-	srv := rest.New(newMock())
+	srv := newSrv(newMock())
 	rr := get(srv, "/api/v1/messages?limit=abc")
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("status: want 400, got %d", rr.Code)
@@ -181,7 +214,7 @@ func TestListMessagesInvalidLimitReturns400(t *testing.T) {
 }
 
 func TestListMessagesZeroLimitReturns400(t *testing.T) {
-	srv := rest.New(newMock())
+	srv := newSrv(newMock())
 	rr := get(srv, "/api/v1/messages?limit=0")
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("status: want 400, got %d", rr.Code)
@@ -189,7 +222,7 @@ func TestListMessagesZeroLimitReturns400(t *testing.T) {
 }
 
 func TestListMessagesNegativeLimitReturns400(t *testing.T) {
-	srv := rest.New(newMock())
+	srv := newSrv(newMock())
 	rr := get(srv, "/api/v1/messages?limit=-5")
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("status: want 400, got %d", rr.Code)
@@ -199,7 +232,7 @@ func TestListMessagesNegativeLimitReturns400(t *testing.T) {
 func TestListMessagesResponseHasQualityFields(t *testing.T) {
 	m := newMock()
 	m.add("msg-q", store.StatusPending, 0.75)
-	srv := rest.New(m)
+	srv := newSrv(m)
 
 	rr := get(srv, "/api/v1/messages")
 	var resp []map[string]any
@@ -216,7 +249,7 @@ func TestListMessagesResponseHasQualityFields(t *testing.T) {
 func TestGetMessageReturns200(t *testing.T) {
 	m := newMock()
 	m.add("msg-get", store.StatusPending, 0.9)
-	srv := rest.New(m)
+	srv := newSrv(m)
 
 	rr := get(srv, "/api/v1/messages/msg-get")
 	if rr.Code != http.StatusOK {
@@ -227,7 +260,7 @@ func TestGetMessageReturns200(t *testing.T) {
 func TestGetMessageReturnsCorrectID(t *testing.T) {
 	m := newMock()
 	m.add("msg-abc", store.StatusSent, 0.8)
-	srv := rest.New(m)
+	srv := newSrv(m)
 
 	rr := get(srv, "/api/v1/messages/msg-abc")
 	var resp map[string]any
@@ -238,7 +271,7 @@ func TestGetMessageReturnsCorrectID(t *testing.T) {
 }
 
 func TestGetMessageNotFoundReturns404(t *testing.T) {
-	srv := rest.New(newMock())
+	srv := newSrv(newMock())
 	rr := get(srv, "/api/v1/messages/nonexistent")
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("status: want 404, got %d", rr.Code)
@@ -246,7 +279,7 @@ func TestGetMessageNotFoundReturns404(t *testing.T) {
 }
 
 func TestGetMessageNotFoundBodyHasError(t *testing.T) {
-	srv := rest.New(newMock())
+	srv := newSrv(newMock())
 	rr := get(srv, "/api/v1/messages/ghost")
 	var body map[string]string
 	_ = json.NewDecoder(rr.Body).Decode(&body)
@@ -258,7 +291,7 @@ func TestGetMessageNotFoundBodyHasError(t *testing.T) {
 func TestGetMessageResponseIsValidJSON(t *testing.T) {
 	m := newMock()
 	m.add("msg-json", store.StatusPending, 0.9)
-	srv := rest.New(m)
+	srv := newSrv(m)
 
 	rr := get(srv, "/api/v1/messages/msg-json")
 	var resp map[string]any
@@ -268,7 +301,7 @@ func TestGetMessageResponseIsValidJSON(t *testing.T) {
 }
 
 func TestUnknownMethodReturns405(t *testing.T) {
-	srv := rest.New(newMock())
+	srv := newSrv(newMock())
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", nil)
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -278,9 +311,221 @@ func TestUnknownMethodReturns405(t *testing.T) {
 }
 
 func TestUnknownPathReturns404(t *testing.T) {
-	srv := rest.New(newMock())
+	srv := newSrv(newMock())
 	rr := get(srv, "/api/v1/unknown")
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("status: want 404, got %d", rr.Code)
+	}
+}
+
+// ---- channel API tests -----------------------------------------------------
+
+func TestListChannelsEmptyReturnsArray(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := get(srv, "/api/v1/channels")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d", rr.Code)
+	}
+	body := strings.TrimSpace(rr.Body.String())
+	if !strings.HasPrefix(body, "[") && body != "null" {
+		t.Errorf("expected JSON array, got: %s", body)
+	}
+}
+
+func TestCreateChannelReturns201(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := doJSON(srv, http.MethodPost, "/api/v1/channels", makeTestChannel("ch-new"))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status: want 201, got %d — body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestCreateChannelResponseHasID(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := doJSON(srv, http.MethodPost, "/api/v1/channels", makeTestChannel("ch-id"))
+	var resp map[string]any
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if resp["id"] != "ch-id" {
+		t.Errorf("id: want ch-id, got %v", resp["id"])
+	}
+}
+
+func TestCreateChannelMissingIDReturns400(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := doJSON(srv, http.MethodPost, "/api/v1/channels", map[string]string{"url": "https://x.example.com"})
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("status: want 400, got %d", rr.Code)
+	}
+}
+
+func TestCreateChannelMissingURLReturns400(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := doJSON(srv, http.MethodPost, "/api/v1/channels", map[string]string{"id": "ch-nourl"})
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("status: want 400, got %d", rr.Code)
+	}
+}
+
+func TestCreateChannelDuplicateReturns409(t *testing.T) {
+	srv := newSrv(newMock())
+	ch := makeTestChannel("ch-dup")
+	_ = doJSON(srv, http.MethodPost, "/api/v1/channels", ch)
+	rr := doJSON(srv, http.MethodPost, "/api/v1/channels", ch)
+	if rr.Code != http.StatusConflict {
+		t.Errorf("status: want 409, got %d", rr.Code)
+	}
+}
+
+func TestGetChannelReturns200(t *testing.T) {
+	reg := channel.NewRegistry()
+	_ = reg.Add(makeTestChannel("ch-get"))
+	srv := newSrvWithReg(newMock(), reg)
+
+	rr := get(srv, "/api/v1/channels/ch-get")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d", rr.Code)
+	}
+}
+
+func TestGetChannelNotFoundReturns404(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := get(srv, "/api/v1/channels/ghost")
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("status: want 404, got %d", rr.Code)
+	}
+}
+
+func TestUpdateChannelReturns200(t *testing.T) {
+	reg := channel.NewRegistry()
+	_ = reg.Add(makeTestChannel("ch-upd"))
+	srv := newSrvWithReg(newMock(), reg)
+
+	updated := makeTestChannel("ch-upd")
+	updated.Name = "New Name"
+	rr := doJSON(srv, http.MethodPut, "/api/v1/channels/ch-upd", updated)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d — body: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if resp["name"] != "New Name" {
+		t.Errorf("name: want 'New Name', got %v", resp["name"])
+	}
+}
+
+func TestUpdateChannelNotFoundReturns404(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := doJSON(srv, http.MethodPut, "/api/v1/channels/ghost", makeTestChannel("ghost"))
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("status: want 404, got %d", rr.Code)
+	}
+}
+
+func TestDeleteChannelReturns204(t *testing.T) {
+	reg := channel.NewRegistry()
+	_ = reg.Add(makeTestChannel("ch-del"))
+	srv := newSrvWithReg(newMock(), reg)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/ch-del", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status: want 204, got %d", rr.Code)
+	}
+}
+
+func TestDeleteChannelNotFoundReturns404(t *testing.T) {
+	srv := newSrv(newMock())
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/ghost", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("status: want 404, got %d", rr.Code)
+	}
+}
+
+func TestListChannelsAfterCreate(t *testing.T) {
+	srv := newSrv(newMock())
+	_ = doJSON(srv, http.MethodPost, "/api/v1/channels", makeTestChannel("ch-list1"))
+	_ = doJSON(srv, http.MethodPost, "/api/v1/channels", makeTestChannel("ch-list2"))
+
+	rr := get(srv, "/api/v1/channels")
+	var resp []map[string]any
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if len(resp) != 2 {
+		t.Errorf("expected 2 channels, got %d", len(resp))
+	}
+}
+
+// ---- health endpoint tests -------------------------------------------------
+
+func TestHealthzReturns200(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := get(srv, "/healthz")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d", rr.Code)
+	}
+}
+
+func TestHealthzBodyHasStatusOK(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := get(srv, "/healthz")
+	var body map[string]string
+	_ = json.NewDecoder(rr.Body).Decode(&body)
+	if body["status"] != "ok" {
+		t.Errorf("status: want ok, got %q", body["status"])
+	}
+}
+
+func TestReadyzReturns200WhenStoreHasNoPing(t *testing.T) {
+	// mockStore does not implement pinger — readyz should succeed anyway.
+	srv := newSrv(newMock())
+	rr := get(srv, "/readyz")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d", rr.Code)
+	}
+}
+
+func TestReadyzBodyHasStatusOK(t *testing.T) {
+	srv := newSrv(newMock())
+	rr := get(srv, "/readyz")
+	var body map[string]string
+	_ = json.NewDecoder(rr.Body).Decode(&body)
+	if body["status"] != "ok" {
+		t.Errorf("status: want ok, got %q", body["status"])
+	}
+}
+
+// pingStore wraps mockStore and adds a controllable Ping method.
+type pingStore struct {
+	*mockStore
+	pingErr error
+}
+
+func (p *pingStore) Ping(_ context.Context) error { return p.pingErr }
+
+func TestReadyzReturns503WhenPingFails(t *testing.T) {
+	ps := &pingStore{mockStore: newMock(), pingErr: fmt.Errorf("connection refused")}
+	srv := newSrv(ps)
+	rr := get(srv, "/readyz")
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status: want 503, got %d", rr.Code)
+	}
+	var body map[string]any
+	_ = json.NewDecoder(rr.Body).Decode(&body)
+	if body["status"] != "unavailable" {
+		t.Errorf("status field: want unavailable, got %v", body["status"])
+	}
+	if body["reason"] == "" {
+		t.Error("reason field missing from 503 body")
+	}
+}
+
+func TestReadyzReturns200WhenPingSucceeds(t *testing.T) {
+	ps := &pingStore{mockStore: newMock(), pingErr: nil}
+	srv := newSrv(ps)
+	rr := get(srv, "/readyz")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d", rr.Code)
 	}
 }
