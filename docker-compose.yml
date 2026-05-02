@@ -1,0 +1,35 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # Leave empty to use SQLite (zero-config default).
+      # Set to a postgres:// DSN to switch to PostgreSQL.
+      - DATABASE_URL=
+      - CONFIG_PATH=configs/config.example.yaml
+    volumes:
+      - ./configs:/app/configs:ro
+      - gateway-data:/app/.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  gateway-data:

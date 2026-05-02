@@ -33,3 +33,7 @@ go.work.sum
 
 # Local generated synthetic datasets (never commit)
 .local/
+
+# Frontend build outputs and dependencies
+web/node_modules/
+web/dist/
