@@ -201,10 +201,10 @@ func TestRouteFanOutSendsToEveryEligibleChannel(t *testing.T) {
 // Status aggregation
 // ----------------------------------------------------------------------------
 
-func TestAggregateStatusEmptyReturnsFailed(t *testing.T) {
+func TestAggregateStatusEmptyReturnsPending(t *testing.T) {
 	st, att, err := router.AggregateStatus(nil)
-	if st != "failed" || att != 0 || err != "no channels" {
-		t.Fatalf("got (%q,%d,%q) want (failed,0,no channels)", st, att, err)
+	if st != "pending" || att != 0 || err != "no channels configured" {
+		t.Fatalf("got (%q,%d,%q) want (pending,0,no channels configured)", st, att, err)
 	}
 }
 
@@ -239,13 +239,13 @@ func TestAggregateStatusDeadLetteredBeatsFailed(t *testing.T) {
 	}
 }
 
-func TestAggregateStatusAllSkipped(t *testing.T) {
+func TestAggregateStatusAllSkippedReturnsPending(t *testing.T) {
 	st, att, err := router.AggregateStatus([]router.Decision{
 		{Status: "skipped"},
 		{Status: "skipped"},
 	})
-	if st != "failed" || att != 0 || err != "all channels skipped" {
-		t.Fatalf("got (%q,%d,%q) want (failed,0,all channels skipped)", st, att, err)
+	if st != "pending" || att != 0 || err != "all channels skipped" {
+		t.Fatalf("got (%q,%d,%q) want (pending,0,all channels skipped)", st, att, err)
 	}
 }
 

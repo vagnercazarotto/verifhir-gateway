@@ -203,11 +203,16 @@ var ErrDeliveryFailed = errors.New("router: delivery failed")
 //   - any "dead_lettered" decision  → status "dead_lettered"
 //   - any "failed" decision         → status "failed"
 //   - at least one "sent" decision  → status "sent"
-//   - all decisions skipped         → status "failed" with reason "all channels skipped"
-//   - no decisions / empty slice    → status "failed" with reason "no channels"
+//   - all decisions skipped         → status "pending" with reason "all channels skipped"
+//   - no decisions / empty slice    → status "pending" with reason "no channels configured"
+//
+// "pending" is intentional for the no-decision and all-skipped cases: the
+// gateway worked correctly — there is simply no destination yet — so the
+// record should keep its initial "pending" state until an operator wires
+// a channel that accepts the message.
 func AggregateStatus(decisions []Decision) (status string, attempts int, lastErr string) {
 	if len(decisions) == 0 {
-		return "failed", 0, "no channels"
+		return "pending", 0, "no channels configured"
 	}
 	var sent, failed, deadLettered, skipped int
 	for _, d := range decisions {
@@ -239,6 +244,6 @@ func AggregateStatus(decisions []Decision) (status string, attempts int, lastErr
 	case sent > 0:
 		return "sent", attempts, ""
 	default:
-		return "failed", 0, "all channels skipped"
+		return "pending", 0, "all channels skipped"
 	}
 }
