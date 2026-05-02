@@ -1,15 +1,14 @@
-# VeriFHIR Gateway — Production deployment
+# VeriFHIR Gateway — Production deployment (v0.2.0)
 #
 # Usage:
 #   curl -O https://raw.githubusercontent.com/vagnercazarotto/verifhir-gateway/main/docker-compose.prod.yml
 #   docker compose -f docker-compose.prod.yml up -d
 #
 # Images are pulled from GitHub Container Registry (no build required).
-# Pin a specific version by replacing "latest" with e.g. "v0.2.0".
 
 services:
   gateway:
-    image: ghcr.io/vagnercazarotto/verifhir-gateway:latest
+    image: ghcr.io/vagnercazarotto/verifhir-gateway:v0.2.0
     pull_policy: always
     ports:
       - "8080:8080"   # REST API
@@ -30,7 +29,7 @@ services:
       retries: 3
 
   web:
-    image: ghcr.io/vagnercazarotto/verifhir-web:latest
+    image: ghcr.io/vagnercazarotto/verifhir-web:v0.2.0
     pull_policy: always
     ports:
       - "3000:80"

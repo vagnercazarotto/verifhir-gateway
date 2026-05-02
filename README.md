@@ -31,41 +31,27 @@ This repository contains an initial skeleton with a working bootstrap pipeline:
 
 ## Quick Start
 
-### Opção 1 — Docker (recomendado, sem precisar do código fonte)
+### Option 1 — Docker (recommended, no source code required)
 
-**Pré-requisitos:** Docker Desktop ou Docker Engine com Compose v2.
+**Prerequisites:** Docker Desktop or Docker Engine with Compose v2.
 
 ```bash
-# 1. Baixar o compose de produção
+# 1. Download the production compose file
 curl -O https://raw.githubusercontent.com/vagnercazarotto/verifhir-gateway/main/docker-compose.prod.yml
 
-# 2. Subir (as imagens são puxadas automaticamente do GHCR)
+# 2. Start (images are pulled automatically from GHCR)
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Abrir no browser: **http://localhost:3000**
+Open in your browser: **http://localhost:3000**
 
-| Porta | Serviço |
+| Port | Service |
 |---|---|
 | 3000 | Web UI (React) |
 | 8080 | REST API |
 | 2575 | MLLP listener |
 
-**Atualizar para a versão mais recente:**
-
-```bash
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-```
-
-**Fixar versão específica** (recomendado em produção) — editar o arquivo e substituir `latest` por ex. `v0.2.0`:
-
-```yaml
-image: ghcr.io/vagnercazarotto/verifhir-gateway:v0.2.0
-image: ghcr.io/vagnercazarotto/verifhir-web:v0.2.0
-```
-
-**Parar e remover:**
+**Stop and remove:**
 
 ```bash
 docker compose -f docker-compose.prod.yml down
@@ -73,30 +59,30 @@ docker compose -f docker-compose.prod.yml down
 
 ---
 
-### Opção 2 — Desenvolvimento local (com código fonte)
+### Option 2 — Local development (with source code)
 
-**Pré-requisitos:** Go 1.25+, Node 22+, Docker Desktop.
+**Prerequisites:** Go 1.25+, Node 22+, Docker Desktop.
 
 ```bash
 git clone https://github.com/vagnercazarotto/verifhir-gateway.git
 cd verifhir-gateway
 
-# Subir tudo com build local
+# Start everything with a local build
 docker compose up --build -d
 ```
 
-Ou rodar cada serviço separadamente:
+Or run each service separately:
 
 ```bash
-# Terminal 1 — Gateway Go
+# Terminal 1 — Go Gateway
 mkdir -p .local
 go run ./cmd/gateway
 
-# Terminal 2 — Web UI (dev server com hot-reload)
+# Terminal 2 — Web UI (dev server with hot-reload)
 cd web && npm install && npm run dev
 ```
 
-Web UI disponível em **http://localhost:5173** (proxy automático para a API em :8080).
+Web UI available at **http://localhost:5173** (automatic proxy to the API at :8080).
 
 ### Prerequisites (legacy scripts)
 
