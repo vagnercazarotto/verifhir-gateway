@@ -116,28 +116,28 @@ type ORMResult struct {
 
 // Observation holds a single OBX observation.
 type Observation struct {
-	ID         string  // OBX-1 set ID
-	Code       string  // OBX-3.1
-	CodeText   string  // OBX-3.2
-	System     string  // OBX-3.3
-	Value      string  // OBX-5 (stringified)
-	Unit       string  // OBX-6.1
-	RangeText  string  // OBX-7 reference range
-	Status     string  // OBX-11: F=final, P=preliminary, C=corrected, X=cancelled
-	ObservedAt string  // OBX-14 datetime ISO 8601
-	Abnormal   bool    // true when OBX-8 is H, L, A, AA, LL, HH
+	ID         string // OBX-1 set ID
+	Code       string // OBX-3.1
+	CodeText   string // OBX-3.2
+	System     string // OBX-3.3
+	Value      string // OBX-5 (stringified)
+	Unit       string // OBX-6.1
+	RangeText  string // OBX-7 reference range
+	Status     string // OBX-11: F=final, P=preliminary, C=corrected, X=cancelled
+	ObservedAt string // OBX-14 datetime ISO 8601
+	Abnormal   bool   // true when OBX-8 is H, L, A, AA, LL, HH
 }
 
 // DiagnosticReport is the FHIR R4 DiagnosticReport mapped from ORU^R01.
 type DiagnosticReport struct {
-	ID             string
-	Status         string        // registered | partial | final | amended | corrected | cancelled
-	Code            string        // OBR-4.1 universal service ID
-	CodeText        string        // OBR-4.2
-	Subject         string        // patient MRN
-	EffectiveAt     string        // OBR-7 observation date/time ISO 8601
-	IssuedAt        string        // OBR-22 result status change date/time
-	Observations    []Observation // one per OBX segment
+	ID           string
+	Status       string        // registered | partial | final | amended | corrected | cancelled
+	Code         string        // OBR-4.1 universal service ID
+	CodeText     string        // OBR-4.2
+	Subject      string        // patient MRN
+	EffectiveAt  string        // OBR-7 observation date/time ISO 8601
+	IssuedAt     string        // OBR-22 result status change date/time
+	Observations []Observation // one per OBX segment
 }
 
 // ORUResult is the output of mapping an ORU^R01 message.
@@ -158,12 +158,12 @@ type AppointmentParticipant struct {
 // Appointment is the FHIR R4 Appointment resource mapped from SIU^S12.
 type Appointment struct {
 	ID           string
-	Status       string                   // proposed | pending | booked | arrived | fulfilled | cancelled | noshow
-	ServiceCode  string                   // SCH-6.1
-	ServiceText  string                   // SCH-6.2
-	Start        string                   // SCH-11.4 ISO 8601
-	End          string                   // SCH-11.4 + SCH-9 duration
-	Comment      string                   // SCH-12
+	Status       string // proposed | pending | booked | arrived | fulfilled | cancelled | noshow
+	ServiceCode  string // SCH-6.1
+	ServiceText  string // SCH-6.2
+	Start        string // SCH-11.4 ISO 8601
+	End          string // SCH-11.4 + SCH-9 duration
+	Comment      string // SCH-12
 	Participants []AppointmentParticipant
 }
 

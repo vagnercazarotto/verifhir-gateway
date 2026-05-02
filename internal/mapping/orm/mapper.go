@@ -35,11 +35,11 @@ func Map(msgID string, msg *hl7v2.Message) model.ORMResult {
 	// Each OBR segment is one order item.
 	for _, obr := range msg.AllSegments("OBR") {
 		item := model.OrderItem{
-			ID:       fieldVal(obr, 2),  // OBR-2 (filler order number, fallback)
+			ID:       fieldVal(obr, 2),   // OBR-2 (filler order number, fallback)
 			Code:     compVal(obr, 4, 0), // OBR-4.1
 			CodeText: compVal(obr, 4, 1), // OBR-4.2
 			System:   compVal(obr, 4, 2), // OBR-4.3
-			Priority: fieldVal(obr, 5),  // OBR-5
+			Priority: fieldVal(obr, 5),   // OBR-5
 		}
 		// Prefer ORC-2 placer number when available.
 		if placerID := msg.Get("ORC-2"); placerID != "" {
