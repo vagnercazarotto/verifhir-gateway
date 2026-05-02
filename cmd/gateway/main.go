@@ -43,8 +43,8 @@ func pipeline(msg model.HL7Message) error {
 	report := quality.Score(resource)
 
 	payload := model.RoutedPayload{
-		Resource: resource,
-		Quality:  report,
+		Resource:	resource,
+		Quality:	report,
 	}
 	router.Route(payload)
 	return nil
