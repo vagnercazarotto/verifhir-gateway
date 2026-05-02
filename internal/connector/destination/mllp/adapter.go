@@ -22,11 +22,11 @@ import (
 )
 
 const (
-	vt              = byte(0x0B)
-	fs              = byte(0x1C)
-	cr              = byte(0x0D)
-	defaultTimeout  = 10 * time.Second
-	ackBufSize      = 4096
+	vt             = byte(0x0B)
+	fs             = byte(0x1C)
+	cr             = byte(0x0D)
+	defaultTimeout = 10 * time.Second
+	ackBufSize     = 4096
 )
 
 // Config holds the runtime settings for the MLLP destination adapter.
