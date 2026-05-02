@@ -77,12 +77,12 @@ type QualityFinding struct {
 
 // QualityReport contains scoring and warnings from mapping validation.
 type QualityReport struct {
-	Score		float64
-	Completeness	float64
-	Conformity	float64
-	Confidence	float64
-	Findings	[]QualityFinding
-	Warnings	[]string
+	Score        float64
+	Completeness float64
+	Conformity   float64
+	Confidence   float64
+	Findings     []QualityFinding
+	Warnings     []string
 }
 
 // RoutedPayload is the final package sent to destinations.

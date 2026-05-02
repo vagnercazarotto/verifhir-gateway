@@ -15,27 +15,26 @@ func ToFHIR(msgID string, parsed *parser.ParsedHL7) model.FHIRResource {
 		// Unrecognised event type: return minimal stub so the pipeline
 		// continues and the quality scorer can flag missing fields.
 		return model.FHIRResource{
-			ResourceType:	"Unknown",
-			ID:			msgID,
-			Body:		map[string]any{
-				"error":		err.Error(),
-				"segment_count":	len(parsed.Segments),
+			ResourceType: "Unknown",
+			ID:           msgID,
+			Body: map[string]any{
+				"error":         err.Error(),
+				"segment_count": len(parsed.Segments),
 			},
 		}
 	}
 
 	body := map[string]any{
-		"eventType":	result.EventType,
-		"patient":	result.Patient,
+		"eventType": result.EventType,
+		"patient":   result.Patient,
 	}
 	if result.Encounter != nil {
 		body["encounter"] = result.Encounter
 	}
 
 	return model.FHIRResource{
-		ResourceType:	"Bundle",
-		ID:			msgID,
-		Body:		body,
+		ResourceType: "Bundle",
+		ID:           msgID,
+		Body:         body,
 	}
 }
-
