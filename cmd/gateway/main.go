@@ -48,6 +48,8 @@ func main() {
 	reg := channel.NewRegistry()
 	// Source registry — load from YAML if configured.
 	sourceReg := channel.NewSourceRegistry()
+	// Pipeline registry — starts empty; managed via REST API.
+	pipelineReg := channel.NewPipelineRegistry()
 	if cfg.ChannelsFile != "" {
 		if err := channel.LoadFile(cfg.ChannelsFile, reg); err != nil {
 			log.Printf("[gateway] channels: %v (continuing with empty registry)", err)
@@ -70,7 +72,7 @@ func main() {
 	// HTTP REST API
 	httpSrv := &http.Server{
 		Addr:    ":" + cfg.HTTPPort,
-		Handler: rest.New(st, reg, sourceReg).WithAuditDir(cfg.AuditDir),
+		Handler: rest.New(st, reg, sourceReg, pipelineReg).WithAuditDir(cfg.AuditDir),
 	}
 	go func() {
 		log.Printf("[gateway] REST API listening on :%s", cfg.HTTPPort)

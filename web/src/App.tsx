@@ -3,6 +3,8 @@ import { ToastProvider } from './components/Toast'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Channels from './pages/Channels'
+import Sources from './pages/Sources'
+import Pipelines from './pages/Pipelines'
 import Messages from './pages/Messages'
 import AuditLog from './pages/AuditLog'
 import Reports from './pages/Reports'
@@ -16,6 +18,8 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="channels" element={<Channels />} />
+          <Route path="sources" element={<Sources />} />
+          <Route path="pipelines" element={<Pipelines />} />
           <Route path="messages" element={<Messages />} />
           <Route path="messages/:id" element={<Messages />} />
           <Route path="audit" element={<AuditLog />} />

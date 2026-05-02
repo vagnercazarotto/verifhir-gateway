@@ -89,12 +89,12 @@ func (m *mockStore) Close() error { return nil }
 
 // newSrv builds a Server with the given store and an empty channel registry.
 func newSrv(st store.Store) *rest.Server {
-	return rest.New(st, channel.NewRegistry(), channel.NewSourceRegistry())
+	return rest.New(st, channel.NewRegistry(), channel.NewSourceRegistry(), channel.NewPipelineRegistry())
 }
 
 // newSrvWithReg builds a Server with the given store and registry.
 func newSrvWithReg(st store.Store, reg *channel.Registry) *rest.Server {
-	return rest.New(st, reg, channel.NewSourceRegistry())
+	return rest.New(st, reg, channel.NewSourceRegistry(), channel.NewPipelineRegistry())
 }
 
 func get(srv http.Handler, path string) *httptest.ResponseRecorder {

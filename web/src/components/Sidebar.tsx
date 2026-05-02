@@ -11,6 +11,14 @@ function IconDashboard() {
   )
 }
 
+function IconSources() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 1 0 6 0m-6 0H3m16.5 0a3 3 0 0 1-3 3m3-3a3 3 0 1 0-6 0m6 0h1.5m-7.5 0a3 3 0 0 1-3-3m3 3v1.5m0-4.5a3 3 0 0 0-3-3m3 3H9m1.5-3H3.75A2.25 2.25 0 0 0 1.5 9v.75" />
+    </svg>
+  )
+}
+
 function IconChannels() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
@@ -43,9 +51,19 @@ function IconReports() {
   )
 }
 
+function IconPipelines() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" />
+    </svg>
+  )
+}
+
 const links = [
   { to: '/dashboard', label: 'Dashboard', Icon: IconDashboard },
+  { to: '/sources',   label: 'Sources',   Icon: IconSources   },
   { to: '/channels',  label: 'Channels',  Icon: IconChannels  },
+  { to: '/pipelines', label: 'Pipelines', Icon: IconPipelines },
   { to: '/messages',  label: 'Messages',  Icon: IconMessages  },
   { to: '/audit',     label: 'Audit Log', Icon: IconAudit     },
   { to: '/reports',   label: 'Reports',   Icon: IconReports   },

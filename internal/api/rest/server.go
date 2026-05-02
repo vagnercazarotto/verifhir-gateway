@@ -2,20 +2,25 @@
 //
 // Endpoints:
 //
-//	GET /api/v1/messages          — list messages (query: status, limit)
-//	GET /api/v1/messages/{id}     — get a single message by ID
-//	GET /api/v1/channels          — list channels
-//	POST /api/v1/channels         — create channel
-//	GET /api/v1/channels/{id}     — get channel by ID
-//	PUT /api/v1/channels/{id}     — update channel
-//	DELETE /api/v1/channels/{id}  — delete channel
-//	GET /api/v1/sources           — list sources
-//	POST /api/v1/sources          — create source
-//	GET /api/v1/sources/{id}      — get source by ID
-//	PUT /api/v1/sources/{id}      — update source
-//	DELETE /api/v1/sources/{id}   — delete source
-//	GET /healthz                  — liveness probe
-//	GET /readyz                   — readiness probe (checks store)
+//	GET /api/v1/messages           — list messages (query: status, limit)
+//	GET /api/v1/messages/{id}      — get a single message by ID
+//	GET /api/v1/channels           — list channels
+//	POST /api/v1/channels          — create channel
+//	GET /api/v1/channels/{id}      — get channel by ID
+//	PUT /api/v1/channels/{id}      — update channel
+//	DELETE /api/v1/channels/{id}   — delete channel
+//	GET /api/v1/sources            — list sources
+//	POST /api/v1/sources           — create source
+//	GET /api/v1/sources/{id}       — get source by ID
+//	PUT /api/v1/sources/{id}       — update source
+//	DELETE /api/v1/sources/{id}    — delete source
+//	GET /api/v1/pipelines          — list pipelines
+//	POST /api/v1/pipelines         — create pipeline
+//	GET /api/v1/pipelines/{id}     — get pipeline by ID
+//	PUT /api/v1/pipelines/{id}     — update pipeline
+//	DELETE /api/v1/pipelines/{id}  — delete pipeline
+//	GET /healthz                   — liveness probe
+//	GET /readyz                    — readiness probe (checks store)
 //
 // All responses are JSON. Error bodies have the shape {"error":"reason"}.
 // The server uses Go 1.22 enhanced ServeMux patterns, so unknown methods
@@ -61,16 +66,17 @@ type MessageResponse struct {
 // Server is an http.Handler that exposes the message store and channel
 // registry as a REST API.
 type Server struct {
-	store    store.Store
-	channels *channel.Registry
-	sources  *channel.SourceRegistry
-	auditDir string
-	mux      *http.ServeMux
+	store     store.Store
+	channels  *channel.Registry
+	sources   *channel.SourceRegistry
+	pipelines *channel.PipelineRegistry
+	auditDir  string
+	mux       *http.ServeMux
 }
 
-// New creates a Server backed by st, reg and sourceReg, and registers all routes.
-func New(st store.Store, reg *channel.Registry, sourceReg *channel.SourceRegistry) *Server {
-	s := &Server{store: st, channels: reg, sources: sourceReg}
+// New creates a Server backed by st, reg, sourceReg and pipelineReg, and registers all routes.
+func New(st store.Store, reg *channel.Registry, sourceReg *channel.SourceRegistry, pipelineReg *channel.PipelineRegistry) *Server {
+	s := &Server{store: st, channels: reg, sources: sourceReg, pipelines: pipelineReg}
 	s.mux = http.NewServeMux()
 	// message routes
 	s.mux.HandleFunc("GET /api/v1/messages", s.listMessages)
@@ -87,6 +93,12 @@ func New(st store.Store, reg *channel.Registry, sourceReg *channel.SourceRegistr
 	s.mux.HandleFunc("GET /api/v1/sources/{id}", s.getSource)
 	s.mux.HandleFunc("PUT /api/v1/sources/{id}", s.updateSource)
 	s.mux.HandleFunc("DELETE /api/v1/sources/{id}", s.deleteSource)
+	// pipeline routes
+	s.mux.HandleFunc("GET /api/v1/pipelines", s.listPipelines)
+	s.mux.HandleFunc("POST /api/v1/pipelines", s.createPipeline)
+	s.mux.HandleFunc("GET /api/v1/pipelines/{id}", s.getPipeline)
+	s.mux.HandleFunc("PUT /api/v1/pipelines/{id}", s.updatePipeline)
+	s.mux.HandleFunc("DELETE /api/v1/pipelines/{id}", s.deletePipeline)
 	// audit + reports routes
 	s.mux.HandleFunc("GET /api/v1/audit", s.listAudit)
 	s.mux.HandleFunc("GET /api/v1/reports", s.getReports)
@@ -353,6 +365,94 @@ func (s *Server) deleteSource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to delete source")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- pipeline handlers -----------------------------------------------------
+
+// listPipelines handles GET /api/v1/pipelines
+func (s *Server) listPipelines(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.pipelines.List())
+}
+
+// createPipeline handles POST /api/v1/pipelines
+func (s *Server) createPipeline(w http.ResponseWriter, r *http.Request) {
+	var p channel.Pipeline
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if p.ID == "" {
+		writeError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+	if p.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if err := s.pipelines.Add(p); err != nil {
+		if errors.Is(err, channel.ErrDuplicateID) {
+			writeError(w, http.StatusConflict, "pipeline ID already exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to create pipeline")
+		return
+	}
+	got, _ := s.pipelines.Get(p.ID)
+	writeJSON(w, http.StatusCreated, got)
+}
+
+// getPipeline handles GET /api/v1/pipelines/{id}
+func (s *Server) getPipeline(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	p, err := s.pipelines.Get(id)
+	if err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "pipeline not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to retrieve pipeline")
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+// updatePipeline handles PUT /api/v1/pipelines/{id}
+func (s *Server) updatePipeline(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var p channel.Pipeline
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	p.ID = id // path wins over body
+	if p.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if err := s.pipelines.Update(p); err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "pipeline not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to update pipeline")
+		return
+	}
+	got, _ := s.pipelines.Get(id)
+	writeJSON(w, http.StatusOK, got)
+}
+
+// deletePipeline handles DELETE /api/v1/pipelines/{id}
+func (s *Server) deletePipeline(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.pipelines.Delete(id); err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "pipeline not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to delete pipeline")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -285,3 +285,121 @@ func (r *SourceRegistry) Len() int {
 	defer r.mu.RUnlock()
 	return len(r.sources)
 }
+
+// ---- Pipelines -------------------------------------------------------------
+
+// PipelineFilters defines message-level filter criteria applied before delivery.
+type PipelineFilters struct {
+	// EventTypes limits processing to the listed HL7 event types (e.g. "ADT^A01").
+	// An empty slice means accept all event types.
+	EventTypes []string `yaml:"event_types" json:"event_types,omitempty"`
+	// MinScore is the minimum quality score [0,1] required to proceed.
+	// Messages scoring below this threshold are discarded without delivery.
+	MinScore float64 `yaml:"min_score" json:"min_score"`
+}
+
+// Pipeline routes messages from one source through filters to one or more
+// delivery channels.
+type Pipeline struct {
+	// ID is the unique identifier for this pipeline (URL-safe string).
+	ID string `yaml:"id" json:"id"`
+	// Name is a human-readable label.
+	Name string `yaml:"name" json:"name"`
+	// SourceID is the ID of the SourceConfig that feeds this pipeline.
+	// An empty string means accept messages from any source.
+	SourceID string `yaml:"source_id" json:"source_id,omitempty"`
+	// Filters defines optional message-level criteria.
+	Filters PipelineFilters `yaml:"filters" json:"filters"`
+	// DestinationIDs is the list of Channel IDs to deliver to.
+	DestinationIDs []string `yaml:"destination_ids" json:"destination_ids,omitempty"`
+	// Enabled controls whether this pipeline participates in routing.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// CreatedAt is set when the pipeline is first registered.
+	CreatedAt time.Time `json:"created_at"`
+	// UpdatedAt is refreshed on every update.
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// PipelineRegistry is a thread-safe, in-memory store of Pipelines.
+type PipelineRegistry struct {
+	mu        sync.RWMutex
+	pipelines map[string]Pipeline
+	now       func() time.Time
+}
+
+// NewPipelineRegistry creates an empty PipelineRegistry.
+func NewPipelineRegistry() *PipelineRegistry {
+	return &PipelineRegistry{
+		pipelines: make(map[string]Pipeline),
+		now:       time.Now,
+	}
+}
+
+// Add inserts a new pipeline. Returns ErrDuplicateID if the ID already exists.
+func (r *PipelineRegistry) Add(p Pipeline) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.pipelines[p.ID]; exists {
+		return ErrDuplicateID
+	}
+	now := r.now()
+	p.CreatedAt = now
+	p.UpdatedAt = now
+	r.pipelines[p.ID] = p
+	return nil
+}
+
+// Update replaces an existing pipeline. Returns ErrNotFound if the ID does not
+// exist. CreatedAt is preserved; UpdatedAt is refreshed.
+func (r *PipelineRegistry) Update(p Pipeline) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	existing, exists := r.pipelines[p.ID]
+	if !exists {
+		return ErrNotFound
+	}
+	p.CreatedAt = existing.CreatedAt
+	p.UpdatedAt = r.now()
+	r.pipelines[p.ID] = p
+	return nil
+}
+
+// Delete removes a pipeline by ID. Returns ErrNotFound if the ID does not exist.
+func (r *PipelineRegistry) Delete(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.pipelines[id]; !exists {
+		return ErrNotFound
+	}
+	delete(r.pipelines, id)
+	return nil
+}
+
+// Get returns a copy of the pipeline with the given ID.
+func (r *PipelineRegistry) Get(id string) (Pipeline, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, exists := r.pipelines[id]
+	if !exists {
+		return Pipeline{}, ErrNotFound
+	}
+	return p, nil
+}
+
+// List returns a copy of all pipelines. Order is not guaranteed.
+func (r *PipelineRegistry) List() []Pipeline {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]Pipeline, 0, len(r.pipelines))
+	for _, p := range r.pipelines {
+		out = append(out, p)
+	}
+	return out
+}
+
+// Len returns the number of registered pipelines.
+func (r *PipelineRegistry) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.pipelines)
+}

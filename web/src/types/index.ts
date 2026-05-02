@@ -43,6 +43,38 @@ export interface HealthResponse {
   reason?: string
 }
 
+// ---- sources ---------------------------------------------------------------
+
+export type SourceType = 'mllp'
+
+export interface Source {
+  id: string
+  name: string
+  type: SourceType
+  addr: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ---- pipelines -------------------------------------------------------------
+
+export interface PipelineFilters {
+  event_types?: string[]
+  min_score: number
+}
+
+export interface Pipeline {
+  id: string
+  name: string
+  source_id?: string
+  filters: PipelineFilters
+  destination_ids?: string[]
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
 // ---- audit -----------------------------------------------------------------
 
 export interface AuditEntry {

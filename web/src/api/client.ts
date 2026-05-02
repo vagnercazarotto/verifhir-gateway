@@ -2,7 +2,7 @@
 // During local dev Vite proxies /api, /healthz, /readyz to localhost:8080.
 // In production nginx does the same proxy.
 
-import type { AuditEntry, Channel, HealthResponse, Message, MessageStatus, ReportSummary } from '../types'
+import type { AuditEntry, Channel, HealthResponse, Message, MessageStatus, Pipeline, ReportSummary, Source } from '../types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -44,6 +44,40 @@ export const api = {
       }),
     delete: (id: string) =>
       request<void>(`/api/v1/channels/${id}`, { method: 'DELETE' }),
+  },
+
+  sources: {
+    list: () => request<Source[]>('/api/v1/sources'),
+    get: (id: string) => request<Source>(`/api/v1/sources/${id}`),
+    create: (src: Omit<Source, 'created_at' | 'updated_at'>) =>
+      request<Source>('/api/v1/sources', {
+        method: 'POST',
+        body: JSON.stringify(src),
+      }),
+    update: (id: string, src: Partial<Omit<Source, 'created_at' | 'updated_at'>>) =>
+      request<Source>(`/api/v1/sources/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(src),
+      }),
+    delete: (id: string) =>
+      request<void>(`/api/v1/sources/${id}`, { method: 'DELETE' }),
+  },
+
+  pipelines: {
+    list: () => request<Pipeline[]>('/api/v1/pipelines'),
+    get: (id: string) => request<Pipeline>(`/api/v1/pipelines/${id}`),
+    create: (p: Omit<Pipeline, 'created_at' | 'updated_at'>) =>
+      request<Pipeline>('/api/v1/pipelines', {
+        method: 'POST',
+        body: JSON.stringify(p),
+      }),
+    update: (id: string, p: Partial<Omit<Pipeline, 'created_at' | 'updated_at'>>) =>
+      request<Pipeline>(`/api/v1/pipelines/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(p),
+      }),
+    delete: (id: string) =>
+      request<void>(`/api/v1/pipelines/${id}`, { method: 'DELETE' }),
   },
 
   health: {
