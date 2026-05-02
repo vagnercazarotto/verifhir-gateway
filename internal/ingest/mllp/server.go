@@ -26,14 +26,16 @@ type Handler func(msg model.HL7Message) error
 // handled in its own goroutine. The server sends an ACK on success or a NACK
 // on handler error, then waits for the next message on the same connection.
 type Server struct {
-	addr    string
-	handler Handler
+	addr     string
+	sourceID string
+	handler  Handler
 }
 
 // New creates an MLLP Server that will listen on addr and call handler for
-// every received message.
-func New(addr string, handler Handler) *Server {
-	return &Server{addr: addr, handler: handler}
+// every received message. sourceID is the SourceConfig identifier that is
+// stamped onto every HL7Message received by this listener.
+func New(addr string, sourceID string, handler Handler) *Server {
+	return &Server{addr: addr, sourceID: sourceID, handler: handler}
 }
 
 // ListenAndServe starts the TCP listener and blocks until ctx is cancelled.
@@ -100,9 +102,10 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 		msgID := newMessageID()
 
 		msg := model.HL7Message{
-			ID:      msgID,
-			Source:  remote,
-			Payload: string(payload),
+			ID:       msgID,
+			SourceID: s.sourceID,
+			Source:   remote,
+			Payload:  string(payload),
 		}
 
 		handlerErr := s.handler(msg)

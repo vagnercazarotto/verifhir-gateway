@@ -1,7 +1,7 @@
 // Package channel — YAML loader.
 //
-// LoadFile reads a YAML file whose top-level key is "channels" and populates
-// the given Registry. Example:
+// LoadFile reads a YAML file whose top-level keys are "channels" and optionally
+// "sources", and populates the given registries. Example:
 //
 //	channels:
 //	  - id: primary
@@ -15,6 +15,13 @@
 //	      max_attempts: 3
 //	      initial_backoff_ms: 500
 //	      multiplier: 2.0
+//
+//	sources:
+//	  - id: hospital_a
+//	    name: Hospital A
+//	    type: mllp
+//	    addr: ":2575"
+//	    enabled: true
 package channel
 
 import (
@@ -24,9 +31,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// yamlFile is the top-level structure of a channels YAML file.
+// yamlFile is the top-level structure of a channels/sources YAML file.
 type yamlFile struct {
-	Channels []Channel `yaml:"channels"`
+	Channels []Channel      `yaml:"channels"`
+	Sources  []SourceConfig `yaml:"sources"`
 }
 
 // LoadFile reads the YAML file at path and inserts every channel into reg.
@@ -50,6 +58,29 @@ func LoadYAML(data []byte, reg *Registry) error {
 	for _, ch := range f.Channels {
 		if err := reg.Add(ch); err != nil {
 			return fmt.Errorf("channel: load %q: %w", ch.ID, err)
+		}
+	}
+	return nil
+}
+
+// LoadSourcesFile reads the YAML file at path and inserts every source into reg.
+func LoadSourcesFile(path string, reg *SourceRegistry) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("channel: read %q: %w", path, err)
+	}
+	return LoadSourcesYAML(data, reg)
+}
+
+// LoadSourcesYAML parses YAML bytes and inserts every source into reg.
+func LoadSourcesYAML(data []byte, reg *SourceRegistry) error {
+	var f yamlFile
+	if err := yaml.Unmarshal(data, &f); err != nil {
+		return fmt.Errorf("channel: parse yaml: %w", err)
+	}
+	for _, src := range f.Sources {
+		if err := reg.Add(src); err != nil {
+			return fmt.Errorf("channel: load source %q: %w", src.ID, err)
 		}
 	}
 	return nil

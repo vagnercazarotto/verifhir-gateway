@@ -64,6 +64,9 @@ type Channel struct {
 	MinQualityScore float64 `yaml:"min_quality_score" json:"min_quality_score"`
 	// Enabled controls whether the channel participates in delivery.
 	Enabled bool `yaml:"enabled" json:"enabled"`
+	// SourceIDs restricts delivery to messages originating from specific source IDs.
+	// An empty slice means accept messages from any source.
+	SourceIDs []string `yaml:"source_ids" json:"source_ids,omitempty"`
 	// Retry configures retry-with-backoff for this channel.
 	Retry RetryConfig `yaml:"retry" json:"retry"`
 	// CreatedAt is set when the channel is first registered.
@@ -169,4 +172,116 @@ func (r *Registry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.channels)
+}
+
+// ---- Sources ---------------------------------------------------------------
+
+// SourceType identifies the protocol used by an ingest source.
+type SourceType string
+
+const (
+	// SourceMLLP is a TCP MLLP listener.
+	SourceMLLP SourceType = "mllp"
+)
+
+// SourceConfig describes one ingest source (e.g., an MLLP listener).
+type SourceConfig struct {
+	// ID is the unique identifier for this source (URL-safe string).
+	ID string `yaml:"id" json:"id"`
+	// Name is a human-readable label.
+	Name string `yaml:"name" json:"name"`
+	// Type is the ingest protocol ("mllp").
+	Type SourceType `yaml:"type" json:"type"`
+	// Addr is the listen address (host:port) for MLLP sources.
+	Addr string `yaml:"addr" json:"addr"`
+	// Enabled controls whether this source is active.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// CreatedAt is set when the source is first registered.
+	CreatedAt time.Time `json:"created_at"`
+	// UpdatedAt is refreshed on every update.
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SourceRegistry is a thread-safe, in-memory store of SourceConfigs.
+type SourceRegistry struct {
+	mu      sync.RWMutex
+	sources map[string]SourceConfig
+	now     func() time.Time
+}
+
+// NewSourceRegistry creates an empty SourceRegistry.
+func NewSourceRegistry() *SourceRegistry {
+	return &SourceRegistry{
+		sources: make(map[string]SourceConfig),
+		now:     time.Now,
+	}
+}
+
+// Add inserts a new source. Returns ErrDuplicateID if the ID already exists.
+func (r *SourceRegistry) Add(src SourceConfig) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.sources[src.ID]; exists {
+		return ErrDuplicateID
+	}
+	now := r.now()
+	src.CreatedAt = now
+	src.UpdatedAt = now
+	r.sources[src.ID] = src
+	return nil
+}
+
+// Update replaces an existing source. Returns ErrNotFound if the ID does not exist.
+// CreatedAt is preserved; UpdatedAt is refreshed.
+func (r *SourceRegistry) Update(src SourceConfig) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	existing, exists := r.sources[src.ID]
+	if !exists {
+		return ErrNotFound
+	}
+	src.CreatedAt = existing.CreatedAt
+	src.UpdatedAt = r.now()
+	r.sources[src.ID] = src
+	return nil
+}
+
+// Delete removes a source by ID. Returns ErrNotFound if the ID does not exist.
+func (r *SourceRegistry) Delete(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.sources[id]; !exists {
+		return ErrNotFound
+	}
+	delete(r.sources, id)
+	return nil
+}
+
+// Get returns a copy of the source with the given ID.
+func (r *SourceRegistry) Get(id string) (SourceConfig, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	src, exists := r.sources[id]
+	if !exists {
+		return SourceConfig{}, ErrNotFound
+	}
+	return src, nil
+}
+
+// List returns a copy of all sources. Order is not guaranteed.
+func (r *SourceRegistry) List() []SourceConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]SourceConfig, 0, len(r.sources))
+	for _, src := range r.sources {
+		out = append(out, src)
+	}
+	return out
+}
+
+// Len returns the number of registered sources.
+func (r *SourceRegistry) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.sources)
 }

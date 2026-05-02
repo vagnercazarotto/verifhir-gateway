@@ -2,9 +2,10 @@ package model
 
 // HL7Message is the raw payload received from source systems.
 type HL7Message struct {
-	ID      string
-	Source  string
-	Payload string
+	ID       string
+	SourceID string // ID of the SourceConfig that received this message
+	Source   string // TCP remote addr (kept for logging/backward compat)
+	Payload  string
 }
 
 // FHIRResource is a simplified representation of mapped output.
@@ -202,4 +203,7 @@ type RoutedPayload struct {
 	// RawHL7 holds the original HL7v2 message text. It is populated by the
 	// ingest stage and used by hl7_passthrough channels.
 	RawHL7 string
+	// SourceID is the ID of the SourceConfig that received the original message.
+	// Used by the router to enforce per-channel source filters.
+	SourceID string
 }

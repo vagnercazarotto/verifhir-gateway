@@ -124,14 +124,59 @@ services:
 
 ---
 
-### Phase 4 — Multi-Message Type Support
+### Phase 4 — Multi-Message Type Support ✅ Complete
 
-- ORM^O01 (order messages)
-- ORU^R01 (lab results / observations)
-- SIU^S12 (scheduling)
-- MDM^T02 (clinical documents)
-- Pluggable mapping rules per message type
-- Extended quality rules per message type
+- [x] ORM^O01 (order messages) → FHIR R4 ServiceRequest
+- [x] ORU^R01 (lab results / observations) → FHIR R4 DiagnosticReport + Observation
+- [x] SIU^S12 (scheduling) → FHIR R4 Appointment
+- [x] MDM^T02 (clinical documents) → FHIR R4 DocumentReference
+- [x] Pluggable mapping rules per message type (dispatcher by MSH-9.1)
+- [x] Extended quality rules per message type
+
+**Also completed (outside original scope):**
+- [x] HL7 passthrough output — channels can deliver raw HL7v2 via MLLP TCP instead of FHIR JSON
+  - New `output_type: fhir | hl7_passthrough` field on Channel (YAML + REST API + UI)
+  - MLLP client destination adapter with VT/FS/CR framing, ACK/NACK detection, timeout
+  - Fanout already works: one message → FHIR channel + HL7 passthrough channel simultaneously
+- [x] UI improvements: SVG icons, skeleton loading, auto-refresh Dashboard, Toast notifications,
+  Channel confirm-delete modal, Message search, Output type badge in Channels table
+
+---
+
+### Phase 4.5 — Multi-Source / Multi-Pipeline (In Progress)
+
+> **Goal:** a single gateway instance can listen on multiple MLLP ports and/or HTTP endpoints,
+> each bound to its own set of destination channels. Messages from source A only go to channels
+> configured for that source.
+
+```
+[MLLP :2575  (EHR A)] ──→ Pipeline 1 ──→ [FHIR channel A1] [HL7 channel A2]
+[MLLP :2576  (EHR B)] ──→ Pipeline 2 ──→ [FHIR channel B1]
+[HTTP /ingest (API )] ──→ Pipeline 3 ──→ [FHIR channel C1] [HL7 channel C2]
+```
+
+**Implementation roadmap:**
+
+#### Phase A — Multiple MLLP Sources (current)
+- [ ] `SourceConfig` struct: `{ id, type: mllp|http|file, addr, tls_cert, tls_key }`
+- [ ] `sources:` list in channels YAML / REST API
+- [ ] `main.go` launches one `mllp.Server` goroutine per enabled source
+- [ ] `HL7Message.SourceID` carries which source received the message
+- [ ] Router filters channels by `SourceID` when set (empty = accept all)
+
+**Success criteria:** two simultaneous MLLP listeners on different ports, each delivering
+to independent channel sets, verified by integration test.
+
+#### Phase B — Pipeline Model
+- [ ] `Pipeline` struct: `{ id, name, source_id, filters{event_types, min_score}, destination_ids[] }`
+- [ ] Pipeline Registry (CRUD via REST API + YAML)
+- [ ] Router dispatches per pipeline instead of global channel list
+- [ ] UI: Pipeline Manager page (source + filters + destinations)
+
+#### Phase C — HTTP Ingest Source
+- [ ] `POST /api/ingest/hl7` — accepts raw HL7v2 text body, feeds into pipeline
+- [ ] `POST /api/ingest/fhir` — accepts FHIR JSON, validates, routes to channels
+- [ ] Source authentication via API key (Phase 5 prerequisite)
 
 ---
 

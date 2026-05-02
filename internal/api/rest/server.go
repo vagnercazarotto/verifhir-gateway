@@ -9,6 +9,11 @@
 //	GET /api/v1/channels/{id}     — get channel by ID
 //	PUT /api/v1/channels/{id}     — update channel
 //	DELETE /api/v1/channels/{id}  — delete channel
+//	GET /api/v1/sources           — list sources
+//	POST /api/v1/sources          — create source
+//	GET /api/v1/sources/{id}      — get source by ID
+//	PUT /api/v1/sources/{id}      — update source
+//	DELETE /api/v1/sources/{id}   — delete source
 //	GET /healthz                  — liveness probe
 //	GET /readyz                   — readiness probe (checks store)
 //
@@ -58,13 +63,14 @@ type MessageResponse struct {
 type Server struct {
 	store    store.Store
 	channels *channel.Registry
+	sources  *channel.SourceRegistry
 	auditDir string
 	mux      *http.ServeMux
 }
 
-// New creates a Server backed by st and reg, and registers all routes.
-func New(st store.Store, reg *channel.Registry) *Server {
-	s := &Server{store: st, channels: reg}
+// New creates a Server backed by st, reg and sourceReg, and registers all routes.
+func New(st store.Store, reg *channel.Registry, sourceReg *channel.SourceRegistry) *Server {
+	s := &Server{store: st, channels: reg, sources: sourceReg}
 	s.mux = http.NewServeMux()
 	// message routes
 	s.mux.HandleFunc("GET /api/v1/messages", s.listMessages)
@@ -75,6 +81,12 @@ func New(st store.Store, reg *channel.Registry) *Server {
 	s.mux.HandleFunc("GET /api/v1/channels/{id}", s.getChannel)
 	s.mux.HandleFunc("PUT /api/v1/channels/{id}", s.updateChannel)
 	s.mux.HandleFunc("DELETE /api/v1/channels/{id}", s.deleteChannel)
+	// source routes
+	s.mux.HandleFunc("GET /api/v1/sources", s.listSources)
+	s.mux.HandleFunc("POST /api/v1/sources", s.createSource)
+	s.mux.HandleFunc("GET /api/v1/sources/{id}", s.getSource)
+	s.mux.HandleFunc("PUT /api/v1/sources/{id}", s.updateSource)
+	s.mux.HandleFunc("DELETE /api/v1/sources/{id}", s.deleteSource)
 	// audit + reports routes
 	s.mux.HandleFunc("GET /api/v1/audit", s.listAudit)
 	s.mux.HandleFunc("GET /api/v1/reports", s.getReports)
@@ -253,6 +265,94 @@ func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to delete channel")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- source handlers -------------------------------------------------------
+
+// listSources handles GET /api/v1/sources
+func (s *Server) listSources(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.sources.List())
+}
+
+// createSource handles POST /api/v1/sources
+func (s *Server) createSource(w http.ResponseWriter, r *http.Request) {
+	var src channel.SourceConfig
+	if err := json.NewDecoder(r.Body).Decode(&src); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if src.ID == "" {
+		writeError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+	if src.Addr == "" {
+		writeError(w, http.StatusBadRequest, "addr is required")
+		return
+	}
+	if err := s.sources.Add(src); err != nil {
+		if errors.Is(err, channel.ErrDuplicateID) {
+			writeError(w, http.StatusConflict, "source ID already exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to create source")
+		return
+	}
+	got, _ := s.sources.Get(src.ID)
+	writeJSON(w, http.StatusCreated, got)
+}
+
+// getSource handles GET /api/v1/sources/{id}
+func (s *Server) getSource(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	src, err := s.sources.Get(id)
+	if err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "source not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to retrieve source")
+		return
+	}
+	writeJSON(w, http.StatusOK, src)
+}
+
+// updateSource handles PUT /api/v1/sources/{id}
+func (s *Server) updateSource(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var src channel.SourceConfig
+	if err := json.NewDecoder(r.Body).Decode(&src); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	src.ID = id // path wins over body
+	if src.Addr == "" {
+		writeError(w, http.StatusBadRequest, "addr is required")
+		return
+	}
+	if err := s.sources.Update(src); err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "source not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to update source")
+		return
+	}
+	got, _ := s.sources.Get(id)
+	writeJSON(w, http.StatusOK, got)
+}
+
+// deleteSource handles DELETE /api/v1/sources/{id}
+func (s *Server) deleteSource(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.sources.Delete(id); err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "source not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to delete source")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

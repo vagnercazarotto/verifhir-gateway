@@ -138,6 +138,10 @@ func (r *Router) processChannel(ctx context.Context, ch channel.Channel, payload
 		d.Status = "skipped"
 		d.Reason = "quality score below channel threshold"
 		return d
+	case len(ch.SourceIDs) > 0 && !containsString(ch.SourceIDs, payload.SourceID):
+		d.Status = "skipped"
+		d.Reason = "source not in channel source_ids filter"
+		return d
 	}
 
 	sender := r.senderFor(ch)
@@ -258,4 +262,14 @@ func AggregateStatus(decisions []Decision) (status string, attempts int, lastErr
 	default:
 		return "pending", 0, "all channels skipped"
 	}
+}
+
+// containsString reports whether slice contains s.
+func containsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

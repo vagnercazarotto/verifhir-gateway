@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -45,9 +46,14 @@ func main() {
 
 	// Channel registry — load from YAML if configured.
 	reg := channel.NewRegistry()
+	// Source registry — load from YAML if configured.
+	sourceReg := channel.NewSourceRegistry()
 	if cfg.ChannelsFile != "" {
 		if err := channel.LoadFile(cfg.ChannelsFile, reg); err != nil {
 			log.Printf("[gateway] channels: %v (continuing with empty registry)", err)
+		}
+		if err := channel.LoadSourcesFile(cfg.ChannelsFile, sourceReg); err != nil {
+			log.Printf("[gateway] sources: %v (continuing with empty source registry)", err)
 		}
 	}
 
@@ -64,7 +70,7 @@ func main() {
 	// HTTP REST API
 	httpSrv := &http.Server{
 		Addr:    ":" + cfg.HTTPPort,
-		Handler: rest.New(st, reg).WithAuditDir(cfg.AuditDir),
+		Handler: rest.New(st, reg, sourceReg).WithAuditDir(cfg.AuditDir),
 	}
 	go func() {
 		log.Printf("[gateway] REST API listening on :%s", cfg.HTTPPort)
@@ -73,11 +79,43 @@ func main() {
 		}
 	}()
 
-	// MLLP listener (blocks until ctx cancelled)
-	mllpSrv := mllp.New(cfg.MLLPAddr, makePipeline(rtr, st))
-	if err := mllpSrv.ListenAndServe(ctx); err != nil {
-		log.Printf("[gateway] mllp: %v", err)
+	// Launch one MLLP listener goroutine per enabled source defined in YAML.
+	// If no sources are defined, fall back to the single legacy MLLPAddr.
+	sources := sourceReg.List()
+	activeSources := make([]channel.SourceConfig, 0, len(sources))
+	for _, src := range sources {
+		if src.Enabled && src.Type == channel.SourceMLLP {
+			activeSources = append(activeSources, src)
+		}
 	}
+
+	if len(activeSources) == 0 {
+		// Backward-compat: no sources configured in YAML → use the env-var address.
+		activeSources = []channel.SourceConfig{{
+			ID:      "default",
+			Name:    "Default MLLP Listener",
+			Type:    channel.SourceMLLP,
+			Addr:    cfg.MLLPAddr,
+			Enabled: true,
+		}}
+	}
+
+	var wg sync.WaitGroup
+	for _, src := range activeSources {
+		src := src // capture loop variable
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			srv := mllp.New(src.Addr, src.ID, makePipeline(rtr, st))
+			log.Printf("[gateway] mllp source=%s (%s) listening on %s", src.ID, src.Name, src.Addr)
+			if err := srv.ListenAndServe(ctx); err != nil {
+				log.Printf("[gateway] mllp source=%s: %v", src.ID, err)
+			}
+		}()
+	}
+
+	// Block until all MLLP listeners have stopped (ctx cancelled → listeners exit).
+	wg.Wait()
 
 	// Graceful HTTP shutdown
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -149,7 +187,7 @@ func makePipeline(rtr *router.Router, st store.Store) func(model.HL7Message) err
 			Findings:     len(report.Findings),
 		})
 
-		payload := model.RoutedPayload{Resource: resource, Quality: report, RawHL7: msg.Payload}
+		payload := model.RoutedPayload{Resource: resource, Quality: report, RawHL7: msg.Payload, SourceID: msg.SourceID}
 
 		// Persist as pending before delivery so the message is visible in
 		// the UI even if routing crashes or the gateway restarts mid-flight.

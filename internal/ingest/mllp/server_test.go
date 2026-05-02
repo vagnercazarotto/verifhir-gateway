@@ -30,7 +30,7 @@ func startServer(t *testing.T, handler Handler) (addr string, cancel context.Can
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	srv := New("127.0.0.1:0", handler)
+	srv := New("127.0.0.1:0", "test-source", handler)
 
 	// We need to bind to port 0 to get a random free port, but Server.ListenAndServe
 	// does the Listen internally. Use a temporary listener to find the port first.
