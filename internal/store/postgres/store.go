@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" driver
+	_ "github.com/lib/pq" // registers the "postgres" driver
 
 	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/store"
@@ -49,7 +49,7 @@ type Store struct {
 // schema. The dsn must be a libpq-compatible connection string, e.g.
 // "postgres://user:password@host:5432/dbname?sslmode=disable".
 func Open(dsn string) (*Store, error) {
-	db, err := sql.Open("pgx", dsn)
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: open: %w", err)
 	}
