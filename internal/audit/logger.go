@@ -31,6 +31,10 @@ type Entry struct {
 	Conformity   *float64 `json:"conformity,omitempty"`
 	Confidence   *float64 `json:"confidence,omitempty"`
 	Findings     int      `json:"findings,omitempty"`
+	// ChannelID identifies the destination channel for stage="deliver" entries.
+	ChannelID string `json:"channel_id,omitempty"`
+	// DestURL is the resolved target URL for the delivery attempt.
+	DestURL string `json:"dest_url,omitempty"`
 }
 
 // Log writes e as a single JSON line to the audit sink.

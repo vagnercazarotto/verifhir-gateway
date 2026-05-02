@@ -57,6 +57,8 @@ export interface AuditEntry {
   conformity?: number
   confidence?: number
   findings?: number
+  channel_id?: string
+  dest_url?: string
 }
 
 // ---- reports ---------------------------------------------------------------
