@@ -4,6 +4,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import { api } from '../api/client'
+import { useToast } from '../components/Toast'
 import type { Message } from '../types'
 
 // ---- helpers ---------------------------------------------------------------
@@ -47,11 +48,23 @@ function avg(nums: number[]) {
 
 // ---- stat card -------------------------------------------------------------
 
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+type HighlightColor = 'green' | 'amber' | 'red' | undefined
+
+function StatCard({ label, value, sub, highlight }: {
+  label: string; value: string | number; sub?: string; highlight?: HighlightColor
+}) {
+  const bg = highlight === 'green' ? 'bg-emerald-50 border-emerald-200'
+    : highlight === 'amber' ? 'bg-amber-50 border-amber-200'
+    : highlight === 'red'   ? 'bg-red-50 border-red-200'
+    : 'bg-white border-gray-200'
+  const valueColor = highlight === 'green' ? 'text-emerald-700'
+    : highlight === 'amber' ? 'text-amber-700'
+    : highlight === 'red'   ? 'text-red-700'
+    : 'text-gray-900'
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+    <div className={`rounded-lg shadow-sm border p-5 ${bg}`}>
       <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-gray-900">{value}</p>
+      <p className={`mt-1 text-3xl font-bold ${valueColor}`}>{value}</p>
       {sub && <p className="mt-1 text-sm text-gray-400">{sub}</p>}
     </div>
   )
@@ -60,22 +73,51 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 // ---- page ------------------------------------------------------------------
 
 export default function Dashboard() {
+  const { toast } = useToast()
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
     api.messages
       .list({ limit: 1000 })
       .then(setMessages)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [])
+      .catch((e: Error) => {
+        if (!lastUpdated) setError(e.message)
+        else toast(e.message, 'error')
+      })
+      .finally(() => {
+        setLoading(false)
+        setLastUpdated(new Date())
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick])
 
-  if (loading) {
+  if (loading && !lastUpdated) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
-        Loading…
+      <div className="p-6 space-y-6">
+        <div className="h-6 w-32 bg-gray-200 rounded animate-pulse" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 animate-pulse">
+              <div className="h-2.5 w-24 bg-gray-200 rounded mb-3" />
+              <div className="h-8 w-16 bg-gray-300 rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 h-52 animate-pulse" />
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 h-52 animate-pulse" />
+        </div>
       </div>
     )
   }
@@ -94,12 +136,25 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-xl font-semibold text-gray-800">Dashboard</h1>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-xl font-semibold text-gray-800">Dashboard</h1>
+        {lastUpdated && (
+          <p className="text-xs text-gray-400">
+            Updated {lastUpdated.toLocaleTimeString()}
+            {loading && <span className="ml-1 text-brand-400">↻</span>}
+            <span className="ml-1">· auto-refreshes every 30 s</span>
+          </p>
+        )}
+      </div>
 
       {/* stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Messages"    value={messages.length} />
-        <StatCard label="Avg Quality Score" value={avgScore.toFixed(3)} />
+        <StatCard
+          label="Avg Quality Score"
+          value={avgScore.toFixed(3)}
+          highlight={avgScore >= 0.9 ? 'green' : avgScore >= 0.7 ? 'amber' : 'red'}
+        />
         <StatCard label="Dead-Letter"       value={deadLettered} sub="last 1 000" />
         <StatCard
           label="Sent"

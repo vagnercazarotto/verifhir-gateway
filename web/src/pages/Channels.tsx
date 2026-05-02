@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import type { Channel, RetryConfig } from '../types'
+import { useToast } from '../components/Toast'
 
 // ---- empty channel skeleton for the create form ----------------------------
 
@@ -186,10 +187,12 @@ function ChannelModal({ initial, onSave, onClose, isEdit }: ModalProps) {
 // ---- page ------------------------------------------------------------------
 
 export default function Channels() {
+  const { toast } = useToast()
   const [channels, setChannels] = useState<Channel[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modal, setModal] = useState<null | { isEdit: boolean; channel: Omit<Channel, 'created_at' | 'updated_at'> }>(null)
+  const [confirmDelId, setConfirmDelId] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -209,32 +212,42 @@ export default function Channels() {
     try {
       if (modal?.isEdit) {
         await api.channels.update(form.id, form)
+        toast('Channel updated')
       } else {
         await api.channels.create(form)
+        toast('Channel created')
       }
       setModal(null)
       await load()
     } catch (e) {
-      alert((e as Error).message)
+      toast((e as Error).message, 'error')
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm(`Delete channel "${id}"?`)) return
+    setConfirmDelId(id)
+  }
+
+  async function confirmDelete() {
+    if (!confirmDelId) return
+    const id = confirmDelId
+    setConfirmDelId(null)
     try {
       await api.channels.delete(id)
+      toast(`Channel "${id}" deleted`)
       await load()
     } catch (e) {
-      alert((e as Error).message)
+      toast((e as Error).message, 'error')
     }
   }
 
   async function handleToggle(ch: Channel) {
     try {
       await api.channels.update(ch.id, { enabled: !ch.enabled })
+      toast(ch.enabled ? 'Channel disabled' : 'Channel enabled', 'info')
       await load()
     } catch (e) {
-      alert((e as Error).message)
+      toast((e as Error).message, 'error')
     }
   }
 
@@ -317,6 +330,33 @@ export default function Channels() {
           onSave={handleSave}
           onClose={() => setModal(null)}
         />
+      )}
+
+      {confirmDelId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4">
+            <h2 className="text-base font-semibold text-gray-800">Delete Channel</h2>
+            <p className="text-sm text-gray-600">
+              Delete{' '}
+              <span className="font-mono font-medium">&ldquo;{confirmDelId}&rdquo;</span>?{' '}
+              This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDelId(null)}
+                className="px-4 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm rounded-md bg-red-600 text-white hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ToastProvider } from './components/Toast'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Channels from './pages/Channels'
@@ -8,6 +9,7 @@ import Reports from './pages/Reports'
 
 export default function App() {
   return (
+    <ToastProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
@@ -21,5 +23,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ToastProvider>
   )
 }

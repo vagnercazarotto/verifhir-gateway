@@ -110,6 +110,7 @@ export default function Messages() {
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<MessageStatus | ''>('')
   const [limit, setLimit] = useState(100)
+  const [search, setSearch] = useState('')
   const [detailId, setDetailId] = useState<string | null>(routeId ?? null)
 
   useEffect(() => {
@@ -132,12 +133,27 @@ export default function Messages() {
     navigate('/messages', { replace: true })
   }
 
+  const visible = search
+    ? messages.filter(m =>
+        m.id.toLowerCase().includes(search.toLowerCase()) ||
+        m.resource_type.toLowerCase().includes(search.toLowerCase())
+      )
+    : messages
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-semibold text-gray-800">Message History</h1>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* search */}
+          <input
+            type="search"
+            placeholder="Search ID or type…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-44"
+          />
           {/* status filter */}
           <select
             value={statusFilter}
@@ -162,7 +178,13 @@ export default function Messages() {
         </div>
       </div>
 
-      {loading && <p className="text-gray-400 text-sm">Loading…</p>}
+      {loading && (
+        <div className="space-y-2">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-10 bg-gray-100 rounded animate-pulse" />
+          ))}
+        </div>
+      )}
       {error && <p className="text-red-500 text-sm">{error}</p>}
 
       {!loading && !error && (
@@ -178,14 +200,14 @@ export default function Messages() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {messages.length === 0 && (
+              {visible.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                     No messages found.
                   </td>
                 </tr>
               )}
-              {messages.map(m => (
+              {visible.map(m => (
                 <tr
                   key={m.id}
                   className="hover:bg-gray-50 cursor-pointer"
