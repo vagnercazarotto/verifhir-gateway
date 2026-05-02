@@ -6,8 +6,10 @@ import (
 
 // Config centralizes runtime settings.
 type Config struct {
-	HTTPPort string
-	MLLPAddr string
+	HTTPPort     string
+	MLLPAddr     string
+	DBPath       string // SQLite file path; ignored when DATABASE_URL is set
+	ChannelsFile string // optional YAML file with channel definitions
 }
 
 func Load() Config {
@@ -21,5 +23,15 @@ func Load() Config {
 		mllp = "0.0.0.0:2575"
 	}
 
-	return Config{HTTPPort: port, MLLPAddr: mllp}
+	dbPath := os.Getenv("GATEWAY_DB_PATH")
+	if dbPath == "" {
+		dbPath = ".local/verifhir.db"
+	}
+
+	return Config{
+		HTTPPort:     port,
+		MLLPAddr:     mllp,
+		DBPath:       dbPath,
+		ChannelsFile: os.Getenv("GATEWAY_CHANNELS_FILE"),
+	}
 }

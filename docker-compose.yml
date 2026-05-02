@@ -4,12 +4,14 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "8080:8080"   # REST API
+      - "2575:2575"   # MLLP
     environment:
-      # Leave empty to use SQLite (zero-config default).
-      # Set to a postgres:// DSN to switch to PostgreSQL.
-      - DATABASE_URL=
-      - CONFIG_PATH=configs/config.example.yaml
+      - GATEWAY_HTTP_PORT=8080
+      - GATEWAY_MLLP_ADDR=0.0.0.0:2575
+      - GATEWAY_DB_PATH=.local/verifhir.db
+      # Uncomment to override with PostgreSQL:
+      # - DATABASE_URL=postgres://user:pass@db:5432/verifhir?sslmode=disable
     volumes:
       - ./configs:/app/configs:ro
       - gateway-data:/app/.local

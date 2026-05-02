@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/vagnercazarotto/verifhir-gateway/internal/audit"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/api/rest"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/channel"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/config"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/ingest/mllp"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/mapping"
@@ -17,19 +20,53 @@ import (
 	"github.com/vagnercazarotto/verifhir-gateway/internal/parser"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/quality"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/router"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/store/sqlite"
 )
 
 func main() {
 	cfg := config.Load()
 	fmt.Printf("[gateway] starting verifhir-gateway http=:%s mllp=%s\n", cfg.HTTPPort, cfg.MLLPAddr)
 
+	// Open the message store (SQLite default).
+	st, err := sqlite.Open(cfg.DBPath)
+	if err != nil {
+		log.Fatalf("[gateway] store: %v", err)
+	}
+	defer st.Close()
+
+	// Channel registry — load from YAML if configured.
+	reg := channel.NewRegistry()
+	if cfg.ChannelsFile != "" {
+		if err := channel.LoadFile(cfg.ChannelsFile, reg); err != nil {
+			log.Printf("[gateway] channels: %v (continuing with empty registry)", err)
+		}
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := mllp.New(cfg.MLLPAddr, pipeline)
-	if err := srv.ListenAndServe(ctx); err != nil {
-		log.Fatalf("[gateway] mllp server error: %v", err)
+	// HTTP REST API
+	httpSrv := &http.Server{
+		Addr:    ":" + cfg.HTTPPort,
+		Handler: rest.New(st, reg),
 	}
+	go func() {
+		log.Printf("[gateway] REST API listening on :%s", cfg.HTTPPort)
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("[gateway] http: %v", err)
+		}
+	}()
+
+	// MLLP listener (blocks until ctx cancelled)
+	mllpSrv := mllp.New(cfg.MLLPAddr, pipeline)
+	if err := mllpSrv.ListenAndServe(ctx); err != nil {
+		log.Printf("[gateway] mllp: %v", err)
+	}
+
+	// Graceful HTTP shutdown
+	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = httpSrv.Shutdown(shutCtx)
 
 	fmt.Println("[gateway] shutdown complete")
 }

@@ -1,5 +1,5 @@
 # ---- build stage -----------------------------------------------------------
-FROM golang:1.25-rc-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -16,5 +16,8 @@ WORKDIR /app
 COPY --from=builder /app/gateway .
 COPY configs/ configs/
 
-EXPOSE 8080
+# SQLite data directory — persisted via Docker volume
+RUN mkdir -p .local
+
+EXPOSE 8080 2575
 CMD ["./gateway"]
