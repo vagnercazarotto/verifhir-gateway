@@ -67,13 +67,25 @@ func (r *Retryer) SetSleep(fn func(ctx context.Context, d time.Duration) error) 
 // It returns the last error if all attempts are exhausted, or the context
 // error if the context is cancelled between retries.
 func (r *Retryer) Send(ctx context.Context, payload model.RoutedPayload) error {
+	_, err := r.SendWithAttempts(ctx, payload)
+	return err
+}
+
+// SendWithAttempts is like Send but also returns the number of attempts that
+// were actually executed (1-based). Callers that need to record the attempt
+// count for auditing or metrics should prefer this method.
+//
+// On success the returned count reflects the attempt that succeeded
+// (e.g. 1 if the first try worked). On failure or context cancellation it
+// reflects the last attempt that ran.
+func (r *Retryer) SendWithAttempts(ctx context.Context, payload model.RoutedPayload) (int, error) {
 	backoff := r.cfg.InitialBackoff
 	var lastErr error
 
 	for attempt := 0; attempt < r.cfg.MaxAttempts; attempt++ {
 		lastErr = r.inner.Send(ctx, payload)
 		if lastErr == nil {
-			return nil
+			return attempt + 1, nil
 		}
 
 		// Last attempt — do not sleep.
@@ -82,12 +94,12 @@ func (r *Retryer) Send(ctx context.Context, payload model.RoutedPayload) error {
 		}
 
 		if err := r.sleep(ctx, backoff); err != nil {
-			return fmt.Errorf("retry: context cancelled after %d attempt(s): %w", attempt+1, err)
+			return attempt + 1, fmt.Errorf("retry: context cancelled after %d attempt(s): %w", attempt+1, err)
 		}
 		backoff = time.Duration(float64(backoff) * r.cfg.Multiplier)
 	}
 
-	return fmt.Errorf("retry: all %d attempt(s) failed: %w", r.cfg.MaxAttempts, lastErr)
+	return r.cfg.MaxAttempts, fmt.Errorf("retry: all %d attempt(s) failed: %w", r.cfg.MaxAttempts, lastErr)
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {

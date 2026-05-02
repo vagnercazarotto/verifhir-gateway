@@ -14,12 +14,14 @@ import (
 	"github.com/vagnercazarotto/verifhir-gateway/internal/audit"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/channel"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/config"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/connector/destination/dlq"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/ingest/mllp"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/mapping"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/parser"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/quality"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/router"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/store"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/store/sqlite"
 )
 
@@ -49,9 +51,12 @@ func main() {
 		}
 	}
 
-	// Channel-aware dispatcher (Phase 3 PR 1: scaffold only — real HTTP
-	// delivery, retry and DLQ wiring follow in subsequent PRs).
-	rtr := router.New(reg)
+	// Dead-letter writer for delivery failures (one shared dir for the gateway).
+	dlqW := dlq.New(dlq.Config{Dir: cfg.DLQDir})
+
+	// Channel-aware dispatcher with real HTTP delivery, per-channel retry,
+	// and DLQ on terminal failure.
+	rtr := router.New(reg, dlqW)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -69,7 +74,7 @@ func main() {
 	}()
 
 	// MLLP listener (blocks until ctx cancelled)
-	mllpSrv := mllp.New(cfg.MLLPAddr, makePipeline(rtr))
+	mllpSrv := mllp.New(cfg.MLLPAddr, makePipeline(rtr, st))
 	if err := mllpSrv.ListenAndServe(ctx); err != nil {
 		log.Printf("[gateway] mllp: %v", err)
 	}
@@ -87,8 +92,10 @@ func main() {
 // processing chain and emits one structured audit log line per stage.
 //
 // Routing is delegated to rtr, which fans the payload out across the
-// channels currently registered (see internal/router).
-func makePipeline(rtr *router.Router) func(model.HL7Message) error {
+// channels currently registered (see internal/router). Persistence is
+// delegated to st: every message is saved before routing and the aggregated
+// delivery outcome is recorded after the router returns.
+func makePipeline(rtr *router.Router, st store.Store) func(model.HL7Message) error {
 	return func(msg model.HL7Message) error {
 		audit.Log(audit.Entry{
 			MessageID: msg.ID,
@@ -142,14 +149,44 @@ func makePipeline(rtr *router.Router) func(model.HL7Message) error {
 			Findings:     len(report.Findings),
 		})
 
+		payload := model.RoutedPayload{Resource: resource, Quality: report}
+
+		// Persist as pending before delivery so the message is visible in
+		// the UI even if routing crashes or the gateway restarts mid-flight.
+		ctx := context.Background()
 		t = time.Now()
-		rtr.Route(context.Background(), model.RoutedPayload{Resource: resource, Quality: report})
+		if err := st.Save(ctx, payload); err != nil {
+			audit.Log(audit.Entry{
+				MessageID:  msg.ID,
+				Stage:      "store",
+				DurationMs: time.Since(t).Milliseconds(),
+				Status:     "error",
+				Error:      err.Error(),
+			})
+			// Continue: persistence failure must not block delivery.
+		}
+
+		t = time.Now()
+		decisions := rtr.Route(ctx, payload)
 		audit.Log(audit.Entry{
 			MessageID:  msg.ID,
 			Stage:      "route",
 			DurationMs: time.Since(t).Milliseconds(),
 			Status:     "ok",
 		})
+
+		// Reflect the aggregated delivery outcome on the stored record.
+		status, attempts, lastErr := router.AggregateStatus(decisions)
+		t = time.Now()
+		if err := st.UpdateStatus(ctx, msg.ID, status, attempts, lastErr); err != nil {
+			audit.Log(audit.Entry{
+				MessageID:  msg.ID,
+				Stage:      "store",
+				DurationMs: time.Since(t).Milliseconds(),
+				Status:     "error",
+				Error:      err.Error(),
+			})
+		}
 
 		return nil
 	}

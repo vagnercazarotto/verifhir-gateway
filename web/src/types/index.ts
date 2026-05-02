@@ -59,6 +59,7 @@ export interface AuditEntry {
   findings?: number
   channel_id?: string
   dest_url?: string
+  attempts?: number
 }
 
 // ---- reports ---------------------------------------------------------------

@@ -11,6 +11,7 @@ type Config struct {
 	DBPath       string // SQLite file path; ignored when DATABASE_URL is set
 	ChannelsFile string // optional YAML file with channel definitions
 	AuditDir     string // directory for daily .jsonl audit files
+	DLQDir       string // directory for dead-letter JSON files
 }
 
 func Load() Config {
@@ -34,11 +35,17 @@ func Load() Config {
 		auditDir = ".local/audit"
 	}
 
+	dlqDir := os.Getenv("GATEWAY_DLQ_DIR")
+	if dlqDir == "" {
+		dlqDir = ".local/dlq"
+	}
+
 	return Config{
 		HTTPPort:     port,
 		MLLPAddr:     mllp,
 		DBPath:       dbPath,
 		ChannelsFile: os.Getenv("GATEWAY_CHANNELS_FILE"),
 		AuditDir:     auditDir,
+		DLQDir:       dlqDir,
 	}
 }

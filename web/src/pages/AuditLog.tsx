@@ -2,19 +2,27 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import type { AuditEntry } from '../types'
 
-const STAGES = ['', 'ingest', 'parse', 'map', 'score', 'route']
+const STAGES = ['', 'ingest', 'parse', 'map', 'score', 'route', 'deliver', 'store']
 
 const STAGE_BADGE: Record<string, string> = {
-  ingest: 'bg-blue-100 text-blue-700',
-  parse:  'bg-purple-100 text-purple-700',
-  map:    'bg-indigo-100 text-indigo-700',
-  score:  'bg-yellow-100 text-yellow-700',
-  route:  'bg-teal-100 text-teal-700',
+  ingest:  'bg-blue-100 text-blue-700',
+  parse:   'bg-purple-100 text-purple-700',
+  map:     'bg-indigo-100 text-indigo-700',
+  score:   'bg-yellow-100 text-yellow-700',
+  route:   'bg-teal-100 text-teal-700',
+  deliver: 'bg-emerald-100 text-emerald-700',
+  store:   'bg-slate-100 text-slate-700',
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  ok:    'bg-green-100 text-green-700',
-  error: 'bg-red-100 text-red-700',
+  ok:            'bg-green-100 text-green-700',
+  error:         'bg-red-100 text-red-700',
+  sent:          'bg-emerald-100 text-emerald-700',
+  pending:       'bg-violet-100 text-violet-700',
+  failed:        'bg-red-100 text-red-700',
+  dead_lettered: 'bg-orange-100 text-orange-700',
+  skipped:       'bg-gray-100 text-gray-600',
+  no_channels:   'bg-amber-100 text-amber-700',
 }
 
 function StageBadge({ stage }: { stage: string }) {

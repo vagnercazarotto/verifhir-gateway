@@ -35,6 +35,8 @@ type Entry struct {
 	ChannelID string `json:"channel_id,omitempty"`
 	// DestURL is the resolved target URL for the delivery attempt.
 	DestURL string `json:"dest_url,omitempty"`
+	// Attempts is the number of delivery tries actually executed.
+	Attempts int `json:"attempts,omitempty"`
 }
 
 // Log writes e as a single JSON line to the audit sink.
