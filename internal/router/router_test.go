@@ -285,3 +285,219 @@ func TestRouterRebuildsSenderWhenChannelUpdated(t *testing.T) {
 		t.Fatalf("expected 2 sender builds after update, got %d", got)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// Pipeline-based routing
+// ----------------------------------------------------------------------------
+
+// pipelinePayload builds a payload with a given sourceID, eventType, and score.
+func pipelinePayload(sourceID, eventType string, score float64) model.RoutedPayload {
+	return model.RoutedPayload{
+		Resource: model.FHIRResource{
+			ResourceType: "Bundle",
+			ID:           "msg-pl-1",
+			Body:         map[string]any{"eventType": eventType},
+		},
+		Quality:  model.QualityReport{Score: score},
+		SourceID: sourceID,
+	}
+}
+
+func mustAddPipeline(t *testing.T, preg *channel.PipelineRegistry, p channel.Pipeline) {
+	t.Helper()
+	if err := preg.Add(p); err != nil {
+		t.Fatalf("add pipeline %s: %v", p.ID, err)
+	}
+}
+
+func TestPipelineRoutingDeliversToDestination(t *testing.T) {
+	reg := channel.NewRegistry()
+	mustAdd(t, reg, channel.Channel{ID: "dest-a", URL: "http://a", Enabled: true})
+
+	preg := channel.NewPipelineRegistry()
+	mustAddPipeline(t, preg, channel.Pipeline{
+		ID:             "pl-1",
+		Name:           "All traffic",
+		DestinationIDs: []string{"dest-a"},
+		Enabled:        true,
+	})
+
+	sender := &fakeSender{retAtts: 1, retErr: nil}
+	r := router.New(reg, nil).WithPipelines(preg)
+	r.SetBuilder(builderReturning(sender))
+
+	got := r.Route(context.Background(), pipelinePayload("src-1", "ADT^A01", 1.0))
+	if len(got) != 1 || got[0].Status != "sent" || got[0].ChannelID != "dest-a" {
+		t.Fatalf("expected sent to dest-a, got %+v", got)
+	}
+}
+
+func TestPipelineRoutingSourceIDFilterExcludes(t *testing.T) {
+	reg := channel.NewRegistry()
+	mustAdd(t, reg, channel.Channel{ID: "dest-b", URL: "http://b", Enabled: true})
+
+	preg := channel.NewPipelineRegistry()
+	mustAddPipeline(t, preg, channel.Pipeline{
+		ID:             "pl-src",
+		Name:           "Source-filtered",
+		SourceID:       "expected-source",
+		DestinationIDs: []string{"dest-b"},
+		Enabled:        true,
+	})
+
+	sender := &fakeSender{retAtts: 1, retErr: nil}
+	r := router.New(reg, nil).WithPipelines(preg)
+	r.SetBuilder(builderReturning(sender))
+
+	// Wrong source ID — pipeline should not match → no decisions (nil)
+	got := r.Route(context.Background(), pipelinePayload("wrong-source", "ADT^A01", 1.0))
+	if got != nil {
+		t.Fatalf("expected nil decisions for excluded source, got %+v", got)
+	}
+	if sender.Calls() != 0 {
+		t.Fatalf("sender should not have been called, got %d calls", sender.Calls())
+	}
+}
+
+func TestPipelineRoutingEventTypeFilterExcludes(t *testing.T) {
+	reg := channel.NewRegistry()
+	mustAdd(t, reg, channel.Channel{ID: "dest-c", URL: "http://c", Enabled: true})
+
+	preg := channel.NewPipelineRegistry()
+	mustAddPipeline(t, preg, channel.Pipeline{
+		ID:             "pl-evt",
+		Name:           "ADT only",
+		Filters:        channel.PipelineFilters{EventTypes: []string{"ADT^A01", "ADT^A08"}},
+		DestinationIDs: []string{"dest-c"},
+		Enabled:        true,
+	})
+
+	sender := &fakeSender{retAtts: 1, retErr: nil}
+	r := router.New(reg, nil).WithPipelines(preg)
+	r.SetBuilder(builderReturning(sender))
+
+	// Event type not in filter → no match
+	got := r.Route(context.Background(), pipelinePayload("any", "ORU^R01", 1.0))
+	if got != nil {
+		t.Fatalf("expected nil for excluded event type, got %+v", got)
+	}
+
+	// Matching event type → delivered
+	got = r.Route(context.Background(), pipelinePayload("any", "ADT^A01", 1.0))
+	if len(got) != 1 || got[0].Status != "sent" {
+		t.Fatalf("expected sent for matching event type, got %+v", got)
+	}
+}
+
+func TestPipelineRoutingMinScoreFilter(t *testing.T) {
+	reg := channel.NewRegistry()
+	mustAdd(t, reg, channel.Channel{ID: "dest-d", URL: "http://d", Enabled: true})
+
+	preg := channel.NewPipelineRegistry()
+	mustAddPipeline(t, preg, channel.Pipeline{
+		ID:             "pl-score",
+		Name:           "High quality only",
+		Filters:        channel.PipelineFilters{MinScore: 0.8},
+		DestinationIDs: []string{"dest-d"},
+		Enabled:        true,
+	})
+
+	sender := &fakeSender{retAtts: 1, retErr: nil}
+	r := router.New(reg, nil).WithPipelines(preg)
+	r.SetBuilder(builderReturning(sender))
+
+	// Score below threshold → no match
+	got := r.Route(context.Background(), pipelinePayload("any", "ADT^A01", 0.5))
+	if got != nil {
+		t.Fatalf("expected nil for low score, got %+v", got)
+	}
+
+	// Score at/above threshold → delivered
+	got = r.Route(context.Background(), pipelinePayload("any", "ADT^A01", 0.9))
+	if len(got) != 1 || got[0].Status != "sent" {
+		t.Fatalf("expected sent for high score, got %+v", got)
+	}
+}
+
+func TestPipelineRoutingMissingDestinationChannelSkips(t *testing.T) {
+	reg := channel.NewRegistry()
+	// dest-missing is NOT added to the registry
+
+	preg := channel.NewPipelineRegistry()
+	mustAddPipeline(t, preg, channel.Pipeline{
+		ID:             "pl-missing",
+		Name:           "Missing dest",
+		DestinationIDs: []string{"dest-missing"},
+		Enabled:        true,
+	})
+
+	r := router.New(reg, nil).WithPipelines(preg)
+	r.SetBuilder(builderReturning(&fakeSender{}))
+
+	got := r.Route(context.Background(), pipelinePayload("any", "ADT^A01", 1.0))
+	if len(got) != 1 || got[0].Status != "skipped" {
+		t.Fatalf("expected one skipped decision for missing channel, got %+v", got)
+	}
+}
+
+func TestPipelineRoutingDisabledPipelineSkipped(t *testing.T) {
+	reg := channel.NewRegistry()
+	mustAdd(t, reg, channel.Channel{ID: "dest-e", URL: "http://e", Enabled: true})
+
+	preg := channel.NewPipelineRegistry()
+	mustAddPipeline(t, preg, channel.Pipeline{
+		ID:             "pl-off",
+		Name:           "Disabled",
+		DestinationIDs: []string{"dest-e"},
+		Enabled:        false,
+	})
+
+	sender := &fakeSender{retAtts: 1}
+	r := router.New(reg, nil).WithPipelines(preg)
+	r.SetBuilder(builderReturning(sender))
+
+	got := r.Route(context.Background(), pipelinePayload("any", "ADT^A01", 1.0))
+	if got != nil {
+		t.Fatalf("expected nil for all-disabled pipelines, got %+v", got)
+	}
+	if sender.Calls() != 0 {
+		t.Fatalf("sender should not have been called")
+	}
+}
+
+func TestPipelineRoutingFanOutMultiplePipelines(t *testing.T) {
+	reg := channel.NewRegistry()
+	mustAdd(t, reg, channel.Channel{ID: "dest-f1", URL: "http://f1", Enabled: true})
+	mustAdd(t, reg, channel.Channel{ID: "dest-f2", URL: "http://f2", Enabled: true})
+
+	preg := channel.NewPipelineRegistry()
+	mustAddPipeline(t, preg, channel.Pipeline{
+		ID:             "pl-f1",
+		Name:           "Fan 1",
+		DestinationIDs: []string{"dest-f1"},
+		Enabled:        true,
+	})
+	mustAddPipeline(t, preg, channel.Pipeline{
+		ID:             "pl-f2",
+		Name:           "Fan 2",
+		DestinationIDs: []string{"dest-f2"},
+		Enabled:        true,
+	})
+
+	sender := &fakeSender{retAtts: 1}
+	r := router.New(reg, nil).WithPipelines(preg)
+	r.SetBuilder(builderReturning(sender))
+
+	got := r.Route(context.Background(), pipelinePayload("any", "ADT^A01", 1.0))
+	if len(got) != 2 {
+		t.Fatalf("expected 2 decisions (one per pipeline), got %d: %+v", len(got), got)
+	}
+	for _, d := range got {
+		if d.Status != "sent" {
+			t.Fatalf("expected all decisions sent, got %+v", d)
+		}
+	}
+	if sender.Calls() != 2 {
+		t.Fatalf("expected 2 sender calls, got %d", sender.Calls())
+	}
+}

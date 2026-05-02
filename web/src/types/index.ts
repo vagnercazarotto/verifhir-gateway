@@ -75,6 +75,13 @@ export interface Pipeline {
   updated_at: string
 }
 
+// ---- ingest ---------------------------------------------------------------
+
+export interface IngestResponse {
+  id: string
+  status: string
+}
+
 // ---- audit -----------------------------------------------------------------
 
 export interface AuditEntry {

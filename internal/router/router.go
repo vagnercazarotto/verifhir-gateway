@@ -1,7 +1,9 @@
-// Package router dispatches a routed payload to every channel registered in
-// channel.Registry that satisfies the channel's filters. Successful deliveries
-// are audit-logged with status="sent"; deliveries that exhaust retries are
-// written to a dead-letter queue and audit-logged with status="dead_lettered".
+// Package router dispatches a routed payload to the appropriate delivery
+// channels. When a PipelineRegistry is wired (via WithPipelines), the router
+// uses pipeline rules — matching on source ID, event type, and quality score —
+// to select which channels receive each message. When no pipelines are
+// registered the router falls back to legacy behaviour: it fans out to every
+// enabled channel in the Registry whose filters are satisfied.
 package router
 
 import (
@@ -50,9 +52,10 @@ type Decision struct {
 // Router holds the registry of delivery channels, the dead-letter writer,
 // and a per-channel cache of Senders.
 type Router struct {
-	reg     *channel.Registry
-	dlq     *dlq.Writer // optional; nil disables dead-lettering
-	builder SenderBuilder
+	reg       *channel.Registry
+	pipelines *channel.PipelineRegistry // optional; nil → legacy fan-out
+	dlq       *dlq.Writer               // optional; nil disables dead-lettering
+	builder   SenderBuilder
 
 	mu      sync.Mutex
 	senders map[string]senderEntry
@@ -86,9 +89,25 @@ func (r *Router) SetBuilder(b SenderBuilder) {
 	r.senders = make(map[string]senderEntry)
 }
 
-// Route iterates every channel in the registry, applies its filters, and for
-// each surviving channel attempts delivery. One audit entry with stage="deliver"
-// is emitted per channel describing the outcome.
+// WithPipelines wires a PipelineRegistry into the router. When at least one
+// pipeline is registered, Route uses pipeline-based dispatch instead of the
+// legacy channel fan-out. Calling this is optional; without it the router
+// keeps its original behaviour.
+func (r *Router) WithPipelines(pr *channel.PipelineRegistry) *Router {
+	r.pipelines = pr
+	return r
+}
+
+// Route dispatches the payload to its destination channels.
+//
+// When a PipelineRegistry has been wired and at least one pipeline is
+// registered, pipeline-based routing is used: each enabled pipeline is
+// evaluated against the payload (source ID, event type, min quality score)
+// and matching pipelines deliver to their destination_ids.
+//
+// When no pipelines are registered the router falls back to the legacy fan-out:
+// every enabled channel in the Registry whose filters are satisfied receives
+// the message. One audit entry with stage="deliver" is emitted per channel.
 func (r *Router) Route(ctx context.Context, payload model.RoutedPayload) []Decision {
 	if r == nil || r.reg == nil {
 		log.Printf("[router] no registry wired; skipping msg=%s",
@@ -96,6 +115,12 @@ func (r *Router) Route(ctx context.Context, payload model.RoutedPayload) []Decis
 		return nil
 	}
 
+	// Pipeline-based routing when pipelines are configured.
+	if r.pipelines != nil && r.pipelines.Len() > 0 {
+		return r.routeViaPipelines(ctx, payload)
+	}
+
+	// Legacy fan-out: deliver to all eligible channels.
 	channels := r.reg.List()
 	if len(channels) == 0 {
 		audit.Log(audit.Entry{
@@ -120,6 +145,77 @@ func (r *Router) Route(ctx context.Context, payload model.RoutedPayload) []Decis
 			Attempts:   d.Attempts,
 			DurationMs: d.Duration.Milliseconds(),
 		})
+	}
+	return decisions
+}
+
+// routeViaPipelines evaluates each enabled pipeline against the payload and
+// delivers to the destination channels of every matching pipeline.
+func (r *Router) routeViaPipelines(ctx context.Context, payload model.RoutedPayload) []Decision {
+	pipelines := r.pipelines.List()
+	eventType, _ := payload.Resource.Body["eventType"].(string)
+
+	var decisions []Decision
+	anyMatched := false
+
+	for _, pl := range pipelines {
+		if !pl.Enabled {
+			continue
+		}
+		// Source filter — empty source_id means accept any source.
+		if pl.SourceID != "" && pl.SourceID != payload.SourceID {
+			continue
+		}
+		// Event type filter — empty list means accept all event types.
+		if len(pl.Filters.EventTypes) > 0 && !containsString(pl.Filters.EventTypes, eventType) {
+			continue
+		}
+		// Quality score filter.
+		if payload.Quality.Score < pl.Filters.MinScore {
+			continue
+		}
+		anyMatched = true
+
+		for _, destID := range pl.DestinationIDs {
+			ch, err := r.reg.Get(destID)
+			if err != nil {
+				d := Decision{
+					ChannelID: destID,
+					Status:    "skipped",
+					Reason:    "destination channel not found",
+				}
+				decisions = append(decisions, d)
+				audit.Log(audit.Entry{
+					MessageID: payload.Resource.ID,
+					Stage:     "deliver",
+					Status:    "skipped",
+					ChannelID: destID,
+					Error:     "destination channel not found",
+				})
+				continue
+			}
+			d := r.processChannel(ctx, ch, payload)
+			decisions = append(decisions, d)
+			audit.Log(audit.Entry{
+				MessageID:  payload.Resource.ID,
+				Stage:      "deliver",
+				Status:     d.Status,
+				ChannelID:  d.ChannelID,
+				DestURL:    d.URL,
+				Error:      d.Reason,
+				Attempts:   d.Attempts,
+				DurationMs: d.Duration.Milliseconds(),
+			})
+		}
+	}
+
+	if !anyMatched {
+		audit.Log(audit.Entry{
+			MessageID: payload.Resource.ID,
+			Stage:     "deliver",
+			Status:    "no_channels",
+		})
+		return nil
 	}
 	return decisions
 }

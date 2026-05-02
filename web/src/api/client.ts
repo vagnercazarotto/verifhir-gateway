@@ -2,7 +2,7 @@
 // During local dev Vite proxies /api, /healthz, /readyz to localhost:8080.
 // In production nginx does the same proxy.
 
-import type { AuditEntry, Channel, HealthResponse, Message, MessageStatus, Pipeline, ReportSummary, Source } from '../types'
+import type { AuditEntry, Channel, HealthResponse, IngestResponse, Message, MessageStatus, Pipeline, ReportSummary, Source } from '../types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -78,6 +78,15 @@ export const api = {
       }),
     delete: (id: string) =>
       request<void>(`/api/v1/pipelines/${id}`, { method: 'DELETE' }),
+  },
+
+  ingest: {
+    send: (hl7v2: string) =>
+      request<IngestResponse>('/api/v1/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: hl7v2,
+      }),
   },
 
   health: {

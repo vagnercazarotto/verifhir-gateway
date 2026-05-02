@@ -63,16 +63,19 @@ func main() {
 	dlqW := dlq.New(dlq.Config{Dir: cfg.DLQDir})
 
 	// Channel-aware dispatcher with real HTTP delivery, per-channel retry,
-	// and DLQ on terminal failure.
-	rtr := router.New(reg, dlqW)
+	// and DLQ on terminal failure. Pipeline-based routing activates
+	// automatically once at least one pipeline is registered via the API.
+	rtr := router.New(reg, dlqW).WithPipelines(pipelineReg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	// HTTP REST API
 	httpSrv := &http.Server{
-		Addr:    ":" + cfg.HTTPPort,
-		Handler: rest.New(st, reg, sourceReg, pipelineReg).WithAuditDir(cfg.AuditDir),
+		Addr: ":" + cfg.HTTPPort,
+		Handler: rest.New(st, reg, sourceReg, pipelineReg).
+			WithAuditDir(cfg.AuditDir).
+			WithIngestFn(makePipeline(rtr, st)),
 	}
 	go func() {
 		log.Printf("[gateway] REST API listening on :%s", cfg.HTTPPort)

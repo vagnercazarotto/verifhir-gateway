@@ -19,6 +19,7 @@
 //	GET /api/v1/pipelines/{id}     — get pipeline by ID
 //	PUT /api/v1/pipelines/{id}     — update pipeline
 //	DELETE /api/v1/pipelines/{id}  — delete pipeline
+//	POST /api/v1/ingest            — ingest a raw HL7v2 message over HTTP
 //	GET /healthz                   — liveness probe
 //	GET /readyz                    — readiness probe (checks store)
 //
@@ -29,15 +30,20 @@ package rest
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/vagnercazarotto/verifhir-gateway/internal/audit"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/channel"
+	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/store"
 )
 
@@ -70,6 +76,7 @@ type Server struct {
 	channels  *channel.Registry
 	sources   *channel.SourceRegistry
 	pipelines *channel.PipelineRegistry
+	ingestFn  func(model.HL7Message) error // optional; nil → POST /api/v1/ingest returns 501
 	auditDir  string
 	mux       *http.ServeMux
 }
@@ -99,6 +106,8 @@ func New(st store.Store, reg *channel.Registry, sourceReg *channel.SourceRegistr
 	s.mux.HandleFunc("GET /api/v1/pipelines/{id}", s.getPipeline)
 	s.mux.HandleFunc("PUT /api/v1/pipelines/{id}", s.updatePipeline)
 	s.mux.HandleFunc("DELETE /api/v1/pipelines/{id}", s.deletePipeline)
+	// HTTP ingest route
+	s.mux.HandleFunc("POST /api/v1/ingest", s.handleIngest)
 	// audit + reports routes
 	s.mux.HandleFunc("GET /api/v1/audit", s.listAudit)
 	s.mux.HandleFunc("GET /api/v1/reports", s.getReports)
@@ -112,6 +121,14 @@ func New(st store.Store, reg *channel.Registry, sourceReg *channel.SourceRegistr
 // Call before the server starts accepting requests.
 func (s *Server) WithAuditDir(dir string) *Server {
 	s.auditDir = dir
+	return s
+}
+
+// WithIngestFn wires the message processing pipeline into the HTTP ingest
+// endpoint. fn is the same handler used by the MLLP listener. If this is not
+// called, POST /api/v1/ingest returns 501 Not Implemented.
+func (s *Server) WithIngestFn(fn func(model.HL7Message) error) *Server {
+	s.ingestFn = fn
 	return s
 }
 
@@ -456,6 +473,62 @@ func (s *Server) deletePipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- HTTP ingest handler ---------------------------------------------------
+
+const maxIngestBodyBytes = 1 << 20 // 1 MiB — generous upper bound for HL7v2
+
+// handleIngest handles POST /api/v1/ingest
+//
+// Accepts a raw HL7v2 message as the request body (any Content-Type).
+// The message is passed through the same processing pipeline as MLLP-received
+// messages: parse → map → score → route.
+//
+// Request body: raw HL7v2 text (MLLP framing is NOT required).
+// Response (202): {"id":"<message-id>","status":"accepted"}
+func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
+	if s.ingestFn == nil {
+		writeError(w, http.StatusNotImplemented, "HTTP ingest not configured")
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxIngestBodyBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
+	if len(body) == 0 {
+		writeError(w, http.StatusBadRequest, "request body is empty")
+		return
+	}
+
+	msgID := newIngestID()
+	msg := model.HL7Message{
+		ID:       msgID,
+		SourceID: "http-ingest",
+		Source:   r.RemoteAddr,
+		Payload:  string(body),
+	}
+
+	if err := s.ingestFn(msg); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"id":     msgID,
+		"status": "accepted",
+	})
+}
+
+// newIngestID generates a cryptographically random hex message ID.
+func newIngestID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
 }
 
 // listAudit handles GET /api/v1/audit
