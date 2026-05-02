@@ -22,9 +22,12 @@ export interface RetryConfig {
   multiplier: number
 }
 
+export type OutputType = 'fhir' | 'hl7_passthrough'
+
 export interface Channel {
   id: string
   name: string
+  output_type: OutputType
   url: string
   auth_header?: string
   timeout_ms: number

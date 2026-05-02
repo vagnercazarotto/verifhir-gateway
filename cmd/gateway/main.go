@@ -149,7 +149,7 @@ func makePipeline(rtr *router.Router, st store.Store) func(model.HL7Message) err
 			Findings:     len(report.Findings),
 		})
 
-		payload := model.RoutedPayload{Resource: resource, Quality: report}
+		payload := model.RoutedPayload{Resource: resource, Quality: report, RawHL7: msg.Payload}
 
 		// Persist as pending before delivery so the message is visible in
 		// the UI even if routing crashes or the gateway restarts mid-flight.

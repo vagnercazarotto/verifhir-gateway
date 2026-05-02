@@ -15,6 +15,7 @@ import (
 	"github.com/vagnercazarotto/verifhir-gateway/internal/channel"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/connector/destination/dlq"
 	httpdest "github.com/vagnercazarotto/verifhir-gateway/internal/connector/destination/http"
+	mllpdest "github.com/vagnercazarotto/verifhir-gateway/internal/connector/destination/mllp"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/connector/destination/retry"
 	"github.com/vagnercazarotto/verifhir-gateway/internal/model"
 )
@@ -178,14 +179,25 @@ func (r *Router) senderFor(ch channel.Channel) Sender {
 	return sender
 }
 
-// defaultBuilder constructs a retry-wrapped HTTP adapter from a Channel.
+// defaultBuilder constructs a retry-wrapped sender from a Channel.
+// For fhir channels it wraps an HTTP adapter; for hl7_passthrough channels
+// it wraps an MLLP client adapter.
 func defaultBuilder(ch channel.Channel) Sender {
-	adapter := httpdest.New(httpdest.Config{
-		URL:        ch.URL,
-		Timeout:    ch.Timeout(),
-		AuthHeader: ch.AuthHeader,
-	})
-	return retry.New(adapter, retry.Config{
+	var inner retry.Sender
+	switch ch.OutputType {
+	case channel.OutputHL7Passthrough:
+		inner = mllpdest.New(mllpdest.Config{
+			Addr:    ch.URL,
+			Timeout: ch.Timeout(),
+		})
+	default: // OutputFHIR and any unrecognised value
+		inner = httpdest.New(httpdest.Config{
+			URL:        ch.URL,
+			Timeout:    ch.Timeout(),
+			AuthHeader: ch.AuthHeader,
+		})
+	}
+	return retry.New(inner, retry.Config{
 		MaxAttempts:    ch.Retry.MaxAttempts,
 		InitialBackoff: time.Duration(ch.Retry.InitialBackoffMS) * time.Millisecond,
 		Multiplier:     ch.Retry.Multiplier,

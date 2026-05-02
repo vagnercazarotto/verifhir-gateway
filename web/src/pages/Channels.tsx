@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { Channel, RetryConfig } from '../types'
+import type { Channel, OutputType, RetryConfig } from '../types'
 import { useToast } from '../components/Toast'
 
 // ---- empty channel skeleton for the create form ----------------------------
@@ -10,6 +10,7 @@ const emptyRetry: RetryConfig = { max_attempts: 3, initial_backoff_ms: 500, mult
 const emptyChannel: Omit<Channel, 'created_at' | 'updated_at'> = {
   id: '',
   name: '',
+  output_type: 'fhir',
   url: '',
   auth_header: '',
   timeout_ms: 10000,
@@ -90,15 +91,30 @@ function ChannelModal({ initial, onSave, onClose, isEdit }: ModalProps) {
           </label>
 
           <label className="col-span-2">
-            <span className="text-xs font-medium text-gray-500">Destination URL</span>
+            <span className="text-xs font-medium text-gray-500">Output Type</span>
+            <select
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              value={form.output_type}
+              onChange={e => setForm(f => ({ ...f, output_type: e.target.value as OutputType }))}
+            >
+              <option value="fhir">FHIR — HTTP POST (JSON Bundle)</option>
+              <option value="hl7_passthrough">HL7 Passthrough — MLLP TCP (raw HL7v2)</option>
+            </select>
+          </label>
+
+          <label className="col-span-2">
+            <span className="text-xs font-medium text-gray-500">
+              {form.output_type === 'hl7_passthrough' ? 'MLLP Address (host:port)' : 'Destination URL'}
+            </span>
             <input
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               value={form.url}
               onChange={field('url')}
-              placeholder="https://fhir.example.com"
+              placeholder={form.output_type === 'hl7_passthrough' ? 'hl7.example.com:2575' : 'https://fhir.example.com'}
             />
           </label>
 
+          {form.output_type === 'fhir' && (
           <label className="col-span-2">
             <span className="text-xs font-medium text-gray-500">Auth Header (optional)</span>
             <input
@@ -108,6 +124,7 @@ function ChannelModal({ initial, onSave, onClose, isEdit }: ModalProps) {
               placeholder="Bearer token..."
             />
           </label>
+          )}
 
           <label>
             <span className="text-xs font-medium text-gray-500">Timeout (ms)</span>
@@ -275,7 +292,7 @@ export default function Channels() {
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['ID', 'Name', 'URL', 'Min Score', 'Retry', 'Enabled', ''].map(h => (
+                {['ID', 'Name', 'Output', 'URL / Addr', 'Min Score', 'Retry', 'Enabled', ''].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     {h}
                   </th>
@@ -285,7 +302,7 @@ export default function Channels() {
             <tbody className="divide-y divide-gray-100">
               {channels.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                     No channels yet. Create one to get started.
                   </td>
                 </tr>
@@ -294,6 +311,15 @@ export default function Channels() {
                 <tr key={ch.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-xs text-gray-600">{ch.id}</td>
                   <td className="px-4 py-3 font-medium">{ch.name}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                      ch.output_type === 'hl7_passthrough'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-indigo-100 text-indigo-700'
+                    }`}>
+                      {ch.output_type === 'hl7_passthrough' ? 'HL7' : 'FHIR'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-gray-500 truncate max-w-[200px]">{ch.url}</td>
                   <td className="px-4 py-3 text-gray-500">{ch.min_quality_score.toFixed(2)}</td>
                   <td className="px-4 py-3 text-gray-500">{ch.retry.max_attempts}×</td>

@@ -199,4 +199,7 @@ type MDMResult struct {
 type RoutedPayload struct {
 	Resource FHIRResource
 	Quality  QualityReport
+	// RawHL7 holds the original HL7v2 message text. It is populated by the
+	// ingest stage and used by hl7_passthrough channels.
+	RawHL7 string
 }

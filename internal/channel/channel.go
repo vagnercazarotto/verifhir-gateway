@@ -33,17 +33,31 @@ type RetryConfig struct {
 	Multiplier float64 `yaml:"multiplier" json:"multiplier"`
 }
 
-// Channel is a named FHIR delivery destination with its own delivery policy.
+// OutputType controls what format/protocol is used when delivering messages.
+type OutputType string
+
+const (
+	// OutputFHIR delivers the mapped FHIR Bundle as JSON via HTTP POST (default).
+	OutputFHIR OutputType = "fhir"
+	// OutputHL7Passthrough delivers the original raw HL7v2 message via MLLP TCP.
+	OutputHL7Passthrough OutputType = "hl7_passthrough"
+)
+
+// Channel is a named delivery destination with its own delivery policy.
 type Channel struct {
 	// ID is the unique identifier for this channel (URL-safe string).
 	ID string `yaml:"id" json:"id"`
 	// Name is a human-readable label.
 	Name string `yaml:"name" json:"name"`
-	// URL is the target FHIR server endpoint.
+	// OutputType controls the output format and protocol. Defaults to "fhir".
+	OutputType OutputType `yaml:"output_type" json:"output_type"`
+	// URL is the target endpoint.
+	// For fhir: HTTP/HTTPS URL of the FHIR server.
+	// For hl7_passthrough: host:port of the MLLP destination (e.g. "hl7.example.com:2575").
 	URL string `yaml:"url" json:"url"`
-	// AuthHeader is the value sent in the Authorization header (optional).
+	// AuthHeader is the value sent in the Authorization header (optional, FHIR only).
 	AuthHeader string `yaml:"auth_header" json:"auth_header,omitempty"`
-	// TimeoutMS is the HTTP client timeout in milliseconds (default 10 000).
+	// TimeoutMS is the client timeout in milliseconds (default 10 000).
 	TimeoutMS int `yaml:"timeout_ms" json:"timeout_ms"`
 	// MinQualityScore is the minimum quality score [0,1] required to deliver.
 	// Messages scoring below this threshold are dead-lettered without sending.
