@@ -192,6 +192,76 @@ to independent channel sets, verified by integration test.
 
 ---
 
+### Phase 5.5 — IG Baseline Validation & Deviation Classification
+
+> **Goal:** Compare mapping output against the official HL7 v2-to-FHIR Implementation Guide,
+> and classify deviations as conformant, local variation, or true non-conformance.
+> (Prompted by community feedback from Hans Buitendijk, Oracle Health.)
+
+**Context:** The current quality scorer checks completeness, conformity, and confidence — but it
+does not compare results against the official IG (https://hl7.org/fhir/uv/v2mappings/), and it
+cannot distinguish between a hospital's valid local interpretation of HL7v2 vs. a genuine
+mapping error. In practice, almost no hospital follows HL7v2 strictly — local variations are
+the norm. Treating every deviation as an error generates noise and reduces trust in the score.
+
+**Deviation Classification Model:**
+
+```
+HL7v2 message → Mapper → FHIR output
+                              │
+                     Compare against IG baseline
+                              │
+                 ┌────────────┼────────────┐
+                 │            │            │
+            conformant   local_var   non_conformant
+            (matches IG)  (known      (true error)
+                          deviation,
+                          accepted)
+```
+
+**Implementation:**
+
+1. **IG Baseline Rules**
+   - [ ] Define `IGRule` struct: source path, target path, required flag, expected code system
+   - [ ] Populate baseline rules for supported message types (ADT, ORM, ORU, SIU, MDM)
+   - [ ] Reference specific IG sections per rule (e.g., `v2-FHIR IG §PID[Patient]`)
+   - [ ] New file: `internal/quality/ig_baseline.go`
+
+2. **Mapping Profiles (per facility/vendor)**
+   - [ ] Define `MappingProfile` struct: ID, name, list of accepted deviations
+   - [ ] Each accepted deviation: field, rule type, reason
+   - [ ] Load profiles from JSON files in `configs/profiles/`
+   - [ ] Default profile = no accepted deviations (strict IG mode)
+   - [ ] New file: `internal/quality/profile.go`
+
+3. **Deviation Classifier**
+   - [ ] Extend `QualityFinding` with deviation type: `conformant | local_variation | non_conformant`
+   - [ ] Add IG reference string per finding
+   - [ ] Classification logic: check IG → check profile → classify
+   - [ ] Only `non_conformant` findings penalize the quality score
+   - [ ] `local_variation` findings logged but do not reduce score
+   - [ ] New file: `internal/quality/classifier.go`
+
+4. **Scorer Integration**
+   - [ ] Accept optional `MappingProfile` parameter in scoring pipeline
+   - [ ] Adjust score calculation: skip deduction for accepted deviations
+   - [ ] Include deviation breakdown in output (N conformant / N local / N errors)
+
+5. **Output & Reporting**
+   - [ ] Quality report includes deviation classification per finding
+   - [ ] Filter message history by deviation type in REST API and UI
+   - [ ] Profile management via REST API (CRUD) and UI
+
+**Estimated effort:** ~10-12 days
+
+**Success criteria:**
+- Same message scored with default profile vs. hospital-specific profile produces different results
+- Local variations (Z-segments, alternative code systems) do not penalize quality score
+- True non-conformance (wrong resource type, lost required fields) still flagged as errors
+- IG baseline covers all fields for ADT, ORM, ORU, SIU, MDM message types
+
+---
+
 ### Phase 6 — Deployment & Operations
 
 - Official Docker image on Docker Hub
