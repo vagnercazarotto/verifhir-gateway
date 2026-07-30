@@ -6,7 +6,7 @@
 | Package | [![Go Version](https://img.shields.io/github/go-mod/go-version/vagnercazarotto/verifhir-gateway)](https://github.com/vagnercazarotto/verifhir-gateway/blob/main/go.mod) [![Go Reference](https://pkg.go.dev/badge/github.com/vagnercazarotto/verifhir-gateway.svg)](https://pkg.go.dev/github.com/vagnercazarotto/verifhir-gateway)                                                                                       |
 | Meta    | [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md) [![Domain](https://img.shields.io/badge/domain-HL7v2%20%E2%86%92%20FHIR-orange)](docs/PROJECT-SCOPE.md) [![Status](https://img.shields.io/badge/status-active-brightgreen)](#current-status)                                    |
 
-HL7v2 to FHIR gateway with quality scoring, pipeline-based routing, and a management UI.
+HL7v2 to FHIR® gateway with quality scoring, pipeline-based routing, and a management UI.
 
 ## Why This Project
 
@@ -342,6 +342,10 @@ Open the command palette and run `Tasks: Run Task`, then choose:
 - Go Test ./...
 - Run Gateway (Git Bash)
 - Generate Dataset (Git Bash)
+
+## Trademark
+
+FHIR® is the registered trademark of HL7 and is used with the permission of HL7. Use of the FHIR trademark does not constitute endorsement of the application by HL7.
 
 ## License
 
